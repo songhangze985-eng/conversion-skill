@@ -15,7 +15,7 @@
 
 输出:
     JSON 到 stdout,字段:
-      is_empty, is_chitchat, has_formula, has_mixed_content, recommend_action
+      is_empty, is_chitchat, has_formula, has_mixed_content, recommend_level, recommend_action
 
 仅依赖 Python 标准库 (json, argparse, sys, re)。
 Windows 兼容。
@@ -161,6 +161,37 @@ def recommend(is_empty: bool, is_chitchat: bool, has_formula: bool) -> str:
     return "proceed"
 
 
+def recommend_output_level(text: str) -> str:
+    """
+    基于文本特征的启发式输出层次推荐。
+
+    评估逻辑:
+      - 计算文本长度(字符数)
+      - 计算术语密度:统计 text 中出现 KNOWLEDGE_HINTS 关键词的数量(不重复计数)
+      - 文本长度 < 500 且 术语命中数 < 3 → "简约"
+      - 文本长度 > 2000 且 术语命中数 >= 5 → "专业"
+      - 其余 → "适中"
+    """
+    if not text:
+        return "适中"
+
+    length = len(text)
+    # 统计不重复命中的关键词数量
+    hit_count = 0
+    for kw in KNOWLEDGE_HINTS:
+        if kw in text:
+            hit_count += 1
+            if hit_count >= 5:
+                # 达到专业阈值上限即可提前结束,避免无谓遍历
+                break
+
+    if length < 500 and hit_count < 3:
+        return "简约"
+    if length > 2000 and hit_count >= 5:
+        return "专业"
+    return "适中"
+
+
 def analyze(text: str) -> dict:
     """对文本做完整分析,返回结果字典。"""
     empty = is_empty_text(text)
@@ -168,11 +199,13 @@ def analyze(text: str) -> dict:
     formula = has_formula_text(text)
     mixed = has_mixed_content(text)
     action = recommend(empty, chitchat, formula)
+    level = recommend_output_level(text)
     return {
         "is_empty": empty,
         "is_chitchat": chitchat,
         "has_formula": formula,
         "has_mixed_content": mixed,
+        "recommend_level": level,
         "recommend_action": action,
     }
 

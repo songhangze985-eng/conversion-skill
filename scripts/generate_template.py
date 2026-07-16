@@ -35,6 +35,15 @@ STYLE_DESC = {
 
 VALID_STYLES = ("light", "standard", "heavy")
 
+# 输出层次描述
+LEVEL_DESC = {
+    "simple": "简约层次:≤1500字,四步精简,适合低龄化/简单文本。",
+    "moderate": "适中层次:3000-6000字,完整展开,覆盖广,默认层次。",
+    "professional": "专业层次:10000-15000字,深度详尽,逻辑强,术语密集不失真。",
+}
+
+VALID_LEVELS = ("simple", "moderate", "professional")
+
 
 def build_parser() -> argparse.ArgumentParser:
     """构建命令行参数解析器。"""
@@ -45,8 +54,9 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="""\
 示例:
   python generate_template.py --topic "贝叶斯定理" --style standard
-  python generate_template.py --topic "区块链" --style heavy
+  python generate_template.py --topic "区块链" --style heavy --level professional
   python generate_template.py --topic "P(A|B)=..." --style standard --with-formula
+  python generate_template.py --topic "递归" --level simple
 """,
     )
     parser.add_argument(
@@ -61,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="风格强度:light/standard/heavy(默认 standard)",
     )
     parser.add_argument(
+        "-l", "--level",
+        default="moderate",
+        choices=VALID_LEVELS,
+        help="输出层次:simple(简约)/moderate(适中)/professional(专业),默认 moderate",
+    )
+    parser.add_argument(
         "--with-formula",
         action="store_true",
         help='添加「公式含义」小节占位(当知识点含 LaTeX 公式时使用)',
@@ -68,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def render(topic: str, style: str, with_formula: bool) -> str:
+def render(topic: str, style: str, level: str, with_formula: bool) -> str:
     """渲染 markdown 骨架。"""
     style_desc = STYLE_DESC[style]
     lines = []
@@ -77,6 +93,8 @@ def render(topic: str, style: str, with_formula: bool) -> str:
     lines.append(f"# {topic}")
     lines.append("")
     lines.append(f"> 风格档位:**{style}** — {style_desc}")
+    level_desc = LEVEL_DESC[level]
+    lines.append(f"> 输出层次:**{level}** — {level_desc}")
     lines.append("")
 
     # 公式含义小节(可选)
@@ -133,6 +151,12 @@ def render(topic: str, style: str, with_formula: bool) -> str:
         lines.append("<!-- 提示(standard):角色化+场景化+对话化齐全,可读性与准确性并重。 -->")
     else:
         lines.append("<!-- 提示(heavy):重度拟人化,设置完整剧情线,伏笔+反转收尾,二次元浓度拉满。 -->")
+    if level == "simple":
+        lines.append("<!-- 提示(simple):故事精简,≤1500字,不堆细节,四步均精简。 -->")
+    elif level == "moderate":
+        lines.append("<!-- 提示(moderate):完整展开,3000-6000字,覆盖广,精确表达。 -->")
+    else:
+        lines.append("<!-- 提示(professional):深度详尽,10000-15000字,逻辑强,术语密集不失真,可适当打破基础表达限制。 -->")
     lines.append("")
     lines.append("[此处填写二次元故事化正文]")
     lines.append("")
@@ -155,7 +179,7 @@ def main(argv=None) -> int:
     """主入口。"""
     parser = build_parser()
     args = parser.parse_args(argv)
-    md = render(args.topic, args.style, args.with_formula)
+    md = render(args.topic, args.style, args.level, args.with_formula)
     sys.stdout.write(md)
     # 确保以换行结尾
     if not md.endswith("\n"):

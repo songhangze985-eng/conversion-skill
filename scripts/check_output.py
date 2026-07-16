@@ -8,7 +8,9 @@
       - 四步标题是否齐全(理解/提炼/意象映射/转换)
       - 是否存在"知识点校验"小节
       - 粗略统计风格要素满足数(角色化/场景化/对话化/拟人化/伏笔反转),≥3 视为达标
+      - 粗略统计字数(中文字符 + 英文单词),并给出三个层次(简约/适中/专业)的达标参考
     输出人类可读的校验报告,并给出 PASS/FAIL 结论。
+    注:字数统计为参考层,不影响 PASS/FAIL 结论。
 
 用法:
     python check_output.py result.md
@@ -187,7 +189,63 @@ def check_knowledge_coverage(md: str):
     return coverage_str, uncovered, covered
 
 
-def render_report(steps_present, has_verify, style_elements, style_count, coverage_info):
+def count_words(md: str) -> int:
+    """
+    统计粗略字数:中文字符数 + 英文单词数。
+
+    实现:
+      - 中文字符:用正则 [\\u4e00-\\u9fff] 统计数量。
+      - 英文单词:用正则 [a-zA-Z]+ 统计数量。
+      - 返回两者之和。
+    注:不去除 markdown 标记符号,粗略统计即可。
+    """
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", md))
+    english_words = len(re.findall(r"[a-zA-Z]+", md))
+    return chinese_chars + english_words
+
+
+def check_level_word_count(word_count: int, level: str = "moderate"):
+    """
+    根据层次校验字数是否落在范围内。
+
+    level 可选值:"simple" / "moderate" / "professional" / "unknown"(默认 moderate)。
+    校验规则:
+      - simple:       期望 ≤1500
+      - moderate:     期望 3000-6000
+      - professional: 期望 ≥10000(不设硬上限)
+      - unknown:      不校验,返回 (True, "未指定层次,跳过校验")
+    返回格式:(bool, str)。
+    """
+    if level == "simple":
+        ok = word_count <= 1500
+        if ok:
+            msg = f"字数 {word_count},符合简约范围(≤1500)"
+        else:
+            msg = f"字数 {word_count},超出简约上限1500"
+        return ok, msg
+    if level == "moderate":
+        ok = 3000 <= word_count <= 6000
+        if ok:
+            msg = f"字数 {word_count},落在适中范围(3000-6000)"
+        elif word_count < 3000:
+            msg = f"字数 {word_count},低于简约上限1500但未达适中下限3000" if word_count <= 1500 else f"字数 {word_count},低于适中下限3000"
+        else:
+            msg = f"字数 {word_count},超出适中上限6000"
+        return ok, msg
+    if level == "professional":
+        ok = word_count >= 10000
+        if ok:
+            msg = f"字数 {word_count},达到专业下限(≥10000)"
+        else:
+            msg = f"字数 {word_count},未达专业下限10000"
+        return ok, msg
+    if level == "unknown":
+        return True, "未指定层次,跳过校验"
+    # 未知 level 值,按 unknown 处理
+    return True, "未指定层次,跳过校验"
+
+
+def render_report(steps_present, has_verify, style_elements, style_count, coverage_info, word_count=None):
     """渲染人类可读的校验报告。"""
     lines = []
     lines.append("=" * 50)
@@ -231,7 +289,24 @@ def render_report(steps_present, has_verify, style_elements, style_count, covera
         lines.append("    未覆盖关键词: 无")
     lines.append("")
 
-    # 5. 结论
+    # 5. 字数统计(参考层,不影响 PASS/FAIL)
+    # check_output.py 无法直接知道用户指定了哪个层次,
+    # 这里只显示字数,并给出三个层次的达标情况供参考。
+    lines.append("【5】字数统计(参考,不影响结论)")
+    if word_count is None:
+        wc = 0
+    else:
+        wc = word_count
+    lines.append(f"    总字数: {wc}")
+    simple_ok, _ = check_level_word_count(wc, "simple")
+    moderate_ok, _ = check_level_word_count(wc, "moderate")
+    professional_ok, _ = check_level_word_count(wc, "professional")
+    lines.append(f"    简约(≤1500): {'是' if simple_ok else '否'}")
+    lines.append(f"    适中(3000-6000): {'是' if moderate_ok else '否'}")
+    lines.append(f"    专业(≥10000): {'是' if professional_ok else '否'}")
+    lines.append("")
+
+    # 6. 结论
     lines.append("=" * 50)
     if all_steps_ok and has_verify and threshold_met:
         verdict = "PASS"
@@ -259,8 +334,9 @@ def analyze(md: str):
     has_verify = check_verify_section(headers, md)
     style_elements, style_count = check_style_elements(md)
     coverage_info = check_knowledge_coverage(md)
+    word_count = count_words(md)
     report, verdict = render_report(
-        steps_present, has_verify, style_elements, style_count, coverage_info
+        steps_present, has_verify, style_elements, style_count, coverage_info, word_count
     )
     return {
         "steps_present": steps_present,
@@ -268,6 +344,7 @@ def analyze(md: str):
         "style_elements": style_elements,
         "style_count": style_count,
         "coverage_info": coverage_info,
+        "word_count": word_count,
         "verdict": verdict,
         "report": report,
     }
@@ -325,6 +402,7 @@ def main(argv=None) -> int:
             "style_elements": result["style_elements"],
             "style_count": result["style_count"],
             "coverage_info": result["coverage_info"],
+            "word_count": result["word_count"],
             "verdict": result["verdict"],
         }
         print(json.dumps(out, ensure_ascii=False, indent=2))
