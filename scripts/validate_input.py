@@ -15,7 +15,7 @@
 
 输出:
     JSON 到 stdout,字段:
-      is_empty, is_chitchat, has_formula, recommend_action
+      is_empty, is_chitchat, has_formula, has_mixed_content, recommend_action
 
 仅依赖 Python 标准库 (json, argparse, sys, re)。
 Windows 兼容。
@@ -117,6 +117,39 @@ def has_formula_text(text: str) -> bool:
     return bool(LATEX_REGEX.search(text))
 
 
+def has_mixed_content(text: str) -> bool:
+    """
+    检测输入是否为混合内容(同时含表格、清单、公式等多种结构)。
+
+    检测逻辑:
+      - 表格:含 `|` 且至少有 2 行(简化的表格检测)
+      - 清单:含 `- ` 或 `* ` 开头的行至少 2 行
+      - 公式:含 `$`(行内或块级)
+      - 若以上 3 种中至少出现 2 种,则判定为混合内容
+    """
+    if not text:
+        return False
+
+    lines = text.splitlines()
+
+    # 表格:含 `|` 且至少有 2 行
+    has_table = "|" in text and len([ln for ln in lines if ln.strip()]) >= 2
+
+    # 清单:含 `- ` 或 `* ` 开头的行至少 2 行
+    list_lines = [
+        ln for ln in lines
+        if ln.lstrip().startswith("- ") or ln.lstrip().startswith("* ")
+    ]
+    has_list = len(list_lines) >= 2
+
+    # 公式:含 `$`(行内或块级)
+    has_formula = "$" in text
+
+    # 至少出现 2 种则判定为混合内容
+    count = sum([has_table, has_list, has_formula])
+    return count >= 2
+
+
 def recommend(is_empty: bool, is_chitchat: bool, has_formula: bool) -> str:
     """根据三项判定给出建议动作。"""
     if is_empty:
@@ -133,11 +166,13 @@ def analyze(text: str) -> dict:
     empty = is_empty_text(text)
     chitchat = is_chitchat_text(text)
     formula = has_formula_text(text)
+    mixed = has_mixed_content(text)
     action = recommend(empty, chitchat, formula)
     return {
         "is_empty": empty,
         "is_chitchat": chitchat,
         "has_formula": formula,
+        "has_mixed_content": mixed,
         "recommend_action": action,
     }
 

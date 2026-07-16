@@ -5,7 +5,7 @@
 用途:
     为"转换skill"(把晦涩专业知识转为二次元故事风格)做输出结果校验。
     读取一个 markdown 转换结果文件,检查:
-      - 四步标题是否齐全(理解/提炼/抽取/转换)
+      - 四步标题是否齐全(理解/提炼/意象映射/转换)
       - 是否存在"知识点校验"小节
       - 粗略统计风格要素满足数(角色化/场景化/对话化/拟人化/伏笔反转),≥3 视为达标
     输出人类可读的校验报告,并给出 PASS/FAIL 结论。
@@ -29,7 +29,7 @@ import sys
 STEP_KEYWORDS = {
     "理解": ["理解"],
     "提炼": ["提炼"],
-    "抽取": ["抽取"],
+    "意象映射": ["映射", "意象", "对应", "载体", "映射表"],
     "转换": ["转换"],
 }
 
@@ -124,7 +124,70 @@ def check_style_elements(md: str):
     return elements, count
 
 
-def render_report(steps_present, has_verify, style_elements, style_count):
+def check_knowledge_coverage(md: str):
+    """
+    知识点覆盖率校验(质量层,不影响 PASS/FAIL,仅作参考)。
+
+    逻辑:
+      1. 定位"### 2. 提炼"到"### 3."之间的文本,提取列表项(`-` 开头行)
+         中的关键词(取冒号前的部分;若无冒号,则取整项内容)。
+      2. 定位"### 4. 转换"到"### 知识点校验"之间的文本作为故事正文。
+      3. 逐个检查关键词是否在故事正文中出现。
+      4. 返回 (覆盖率字符串, 未覆盖关键词列表, 已覆盖关键词列表)。
+         覆盖率字符串形如 "4/5 = 80%"。
+    """
+    # 第2步(提炼)正文:从"### 2. 提炼"到下一个"### 3."之前
+    m_refine = re.search(
+        r"###\s*2[.\s]*提炼(.*?)(?=###\s*3[.\s])",
+        md,
+        re.DOTALL,
+    )
+    keywords = []
+    if m_refine:
+        refine_text = m_refine.group(1)
+        for line in refine_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("-"):
+                # 去掉前导 "-"
+                item = stripped.lstrip("-").strip()
+                if not item:
+                    continue
+                # 取冒号(中/英)前的部分作为关键词;若无冒号,整项作为关键词
+                if ":" in item or "\uff1a" in item:
+                    kw = re.split(r"[:\uff1a]", item, 1)[0].strip()
+                else:
+                    kw = item
+                if kw:
+                    keywords.append(kw)
+
+    # 第4步(转换)正文:从"### 4. 转换"到"### 知识点校验"之前
+    m_story = re.search(
+        r"###\s*4[.\s]*转换(.*?)(?=###\s*知识点校验)",
+        md,
+        re.DOTALL,
+    )
+    story_body = m_story.group(1) if m_story else ""
+
+    covered = []
+    uncovered = []
+    for kw in keywords:
+        if kw in story_body:
+            covered.append(kw)
+        else:
+            uncovered.append(kw)
+
+    total = len(keywords)
+    covered_count = len(covered)
+    if total > 0:
+        rate_pct = int(covered_count / total * 100)
+        coverage_str = f"{covered_count}/{total} = {rate_pct}%"
+    else:
+        coverage_str = "0/0 = N/A(未提取到关键词)"
+
+    return coverage_str, uncovered, covered
+
+
+def render_report(steps_present, has_verify, style_elements, style_count, coverage_info):
     """渲染人类可读的校验报告。"""
     lines = []
     lines.append("=" * 50)
@@ -135,7 +198,7 @@ def render_report(steps_present, has_verify, style_elements, style_count):
     # 1. 四步标题
     lines.append("【1】四步标题检查")
     all_steps_ok = True
-    for step in ["理解", "提炼", "抽取", "转换"]:
+    for step in ["理解", "提炼", "意象映射", "转换"]:
         ok = steps_present.get(step, False)
         mark = "OK" if ok else "MISSING"
         if not ok:
@@ -158,7 +221,17 @@ def render_report(steps_present, has_verify, style_elements, style_count):
     lines.append(f"    满足数: {style_count}/5  (达标要求 ≥3: {'是' if threshold_met else '否'})")
     lines.append("")
 
-    # 4. 结论
+    # 4. 知识点覆盖率(质量层,仅作参考,不影响 PASS/FAIL)
+    lines.append("【4】知识点覆盖率(参考,不影响结论)")
+    coverage_str, uncovered, _covered = coverage_info
+    lines.append(f"    覆盖率: {coverage_str}")
+    if uncovered:
+        lines.append(f"    未覆盖关键词: {uncovered}")
+    else:
+        lines.append("    未覆盖关键词: 无")
+    lines.append("")
+
+    # 5. 结论
     lines.append("=" * 50)
     if all_steps_ok and has_verify and threshold_met:
         verdict = "PASS"
@@ -168,7 +241,7 @@ def render_report(steps_present, has_verify, style_elements, style_count):
     if verdict == "FAIL":
         lines.append("未通过项:")
         if not all_steps_ok:
-            missing = [s for s in ["理解", "提炼", "抽取", "转换"] if not steps_present.get(s, False)]
+            missing = [s for s in ["理解", "提炼", "意象映射", "转换"] if not steps_present.get(s, False)]
             lines.append(f"  - 四步缺失: {missing}")
         if not has_verify:
             lines.append("  - 缺少知识点校验小节")
@@ -185,12 +258,16 @@ def analyze(md: str):
     steps_present = check_steps(headers)
     has_verify = check_verify_section(headers, md)
     style_elements, style_count = check_style_elements(md)
-    report, verdict = render_report(steps_present, has_verify, style_elements, style_count)
+    coverage_info = check_knowledge_coverage(md)
+    report, verdict = render_report(
+        steps_present, has_verify, style_elements, style_count, coverage_info
+    )
     return {
         "steps_present": steps_present,
         "has_verify": has_verify,
         "style_elements": style_elements,
         "style_count": style_count,
+        "coverage_info": coverage_info,
         "verdict": verdict,
         "report": report,
     }
@@ -247,6 +324,7 @@ def main(argv=None) -> int:
             "has_verify": result["has_verify"],
             "style_elements": result["style_elements"],
             "style_count": result["style_count"],
+            "coverage_info": result["coverage_info"],
             "verdict": result["verdict"],
         }
         print(json.dumps(out, ensure_ascii=False, indent=2))

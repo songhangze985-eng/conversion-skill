@@ -112,8 +112,8 @@ def render(topic: str, style: str, with_formula: bool) -> str:
     lines.append("  - ")
     lines.append("")
 
-    # 第三步:抽取(映射关系表)
-    lines.append("### 3. 抽取")
+    # 第三步:意象映射(映射关系表)
+    lines.append("### 3. 意象映射")
     lines.append("")
     lines.append('<!-- 提示:建立「专业概念 ↔ 故事元素」映射表。每个专业元素都要找到对应的二次元载体(角色/道具/场景/规则),并标注映射理由。 -->')
     lines.append("")
