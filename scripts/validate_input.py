@@ -36,10 +36,15 @@ CHITCHAT_KEYWORDS = [
     "再见", "拜拜", "bye",
     "在吗", "在不在", "忙吗",
     "吃了吗", "早安", "晚安",
+    # 英文闲聊补充
+    "how are you", "how's it going", "what's up", "good morning", "good afternoon",
+    "good evening", "see you", "have a nice", "let us", "let's", "grab a coffee",
+    "weather is", "nice day", "how about",
 ]
 
 # 闲聊判定的文本长度上限(短文本才视为闲聊候选)
-CHITCHAT_MAX_LEN = 30
+# 英文闲聊句子字符数天然更多,提高上限以覆盖英文
+CHITCHAT_MAX_LEN = 80
 
 # 知识特征关键词:出现这些词说明更可能是知识文本而非闲聊
 KNOWLEDGE_HINTS = [
@@ -47,13 +52,12 @@ KNOWLEDGE_HINTS = [
     "矩阵", "向量", "微积分", "概率", "统计", "回归", "分布", "假设",
     "模型", "架构", "协议", "机制", "流程", "结构", "参数", "变量",
     "区块链", "神经网络", "编译", "递归", "复杂度",
-    "is", "the", "=", "+", "-", "公式",
 ]
 
 # LaTeX 公式检测模式
 LATEX_PATTERNS = [
     r"\$\$.+?\$\$",          # $$...$$ 块公式
-    r"(?<!\\)\$[^\$\n]+?\$", # $...$ 行内公式(避免与 $$ 冲突)
+    r"(?<!\\)\$(?!\s*\d+(?:\.\d+)?\s*\$)[^\$\n]+?\$", # $...$ 行内公式(排除纯数字价格$5$)
     r"\\frac\b",
     r"\\dfrac\b",
     r"\\tfrac\b",
@@ -80,6 +84,10 @@ LATEX_PATTERNS = [
     r"\\pm\b",
     r"\\begin\{",          # 环境如 matrix/align
     r"\\end\{",
+    # 化学方程式:含 → 或 ⟶ 且含元素符号+下标(如 6 CO2 + 6 H2O → C6H12O6)
+    r"(?:[A-Z][a-z]?\d*\s*(?:\+\s*)?){2,}\s*(?:→|⟶|->)\s*(?:[A-Z][a-z]?\d*\s*(?:\+\s*)?)+",
+    # 内联等式:含 = 且至少一侧含字母或右括号(如 w = w - eta * grad, P(A|B)=P(B|A))
+    r"(?<=[A-Za-z\)])(\s*=\s*)(?=[A-Za-z])",
 ]
 
 # 合并后的正则
@@ -106,7 +114,10 @@ def is_chitchat_text(text: str) -> bool:
         return False
     lowered = stripped.lower()
     has_chitchat = any(kw in lowered for kw in CHITCHAT_KEYWORDS)
-    has_knowledge = any(kw.lower() in lowered for kw in KNOWLEDGE_HINTS)
+    has_knowledge = any(
+        re.search(r"\b" + re.escape(kw) + r"\b", lowered) if re.search(r"[A-Za-z]", kw) else (kw in text)
+        for kw in KNOWLEDGE_HINTS
+    )
     return has_chitchat and not has_knowledge
 
 
@@ -179,15 +190,24 @@ def recommend_output_level(text: str) -> str:
     # 统计不重复命中的关键词数量
     hit_count = 0
     for kw in KNOWLEDGE_HINTS:
-        if kw in text:
-            hit_count += 1
-            if hit_count >= 5:
-                # 达到专业阈值上限即可提前结束,避免无谓遍历
-                break
+        if re.search(r"[A-Za-z]", kw):
+            # 英文词用词边界匹配
+            if re.search(r"\b" + re.escape(kw) + r"\b", text, re.IGNORECASE):
+                hit_count += 1
+        else:
+            # 中文词用子串匹配
+            if kw in text:
+                hit_count += 1
+        if hit_count >= 5:
+            # 达到专业阈值上限即可提前结束,避免无谓遍历
+            break
 
     if length < 500 and hit_count < 3:
         return "简约"
-    if length > 2000 and hit_count >= 5:
+    # 密度优先:术语命中数≥5 即允许专业档(即使文本较短)
+    if hit_count >= 5:
+        return "专业"
+    if length > 2000 and hit_count >= 3:
         return "专业"
     return "适中"
 
@@ -251,6 +271,9 @@ def main(argv=None) -> int:
 
     # 获取文本:位置参数缺失时回退到 stdin
     if args.text is None:
+        # 交互终端下给出提示,避免用户以为卡死
+        if sys.stdin.isatty():
+            sys.stderr.write("请输入要校验的文本(Ctrl+D 或 Ctrl+Z 结束输入):\n")
         text = sys.stdin.read()
     else:
         text = read_input(args.text)

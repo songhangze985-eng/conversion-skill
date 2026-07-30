@@ -53,7 +53,7 @@ SCENE_KEYWORDS = [
 # 角色化迹象:对话引号 或 名字+后缀(酱/同学/小姐/先生)
 ROLE_REGEX = re.compile(
     r"[「」『』]|"
-    r"\w+(?:同学|小姐|先生|酱|ちゃん|さん|くん|老师|殿下|大人)"
+    r"[\u4e00-\u9fffA-Za-z]{2,}(?:同学|小姐|先生|酱|ちゃん|さん|くん|老师|殿下|大人)"
 )
 
 # 对话化:含「」或中文双引号“”引号对话
@@ -61,16 +61,30 @@ ROLE_REGEX = re.compile(
 DIALOGUE_REGEX = re.compile("[「」『』]|\u201c[^\u201d]+?\u201d")
 
 # 拟人化:她/他/它 指代概念(简化:只要出现这些代词即算)
-PERSONIFICATION_REGEX = re.compile(r"她|他(?!们)|它(?!们)")
+PERSONIFICATION_REGEX = re.compile(r"她(?!们)|他(?!们)|它(?!们)")
 
 # 伏笔反转:含转折/揭示词
-TWIST_REGEX = re.compile(r"然而|突然|原来|其实|不料|谁知|偏偏|竟[然]?")
+TWIST_REGEX = re.compile(r"然而|突然|不料|谁知|偏偏|竟[然]?|原来如此|其实不然")
 
 
 def read_file(path: str) -> str:
-    """读取文件内容。"""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    """读取文件内容,异常时友好报错。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        sys.stderr.write(f"错误: 文件不存在: {path}\n")
+        sys.exit(2)
+    except UnicodeDecodeError:
+        try:
+            with open(path, "r", encoding="gbk", errors="ignore") as f:
+                return f.read()
+        except Exception as e:
+            sys.stderr.write(f"错误: 无法读取文件: {e}\n")
+            sys.exit(2)
+    except IOError as e:
+        sys.stderr.write(f"错误: 读取文件失败: {e}\n")
+        sys.exit(2)
 
 
 def find_headers(md: str):
@@ -89,24 +103,43 @@ def find_headers(md: str):
 
 
 def check_steps(headers):
-    """检查四步标题是否齐全。"""
-    all_titles = " ".join(t for _, t in headers)
-    present = {}
-    for step, kws in STEP_KEYWORDS.items():
-        present[step] = any(kw in all_titles for kw in kws)
+    """检查四步标题是否齐全(要求结构化标题:序号+关键词)。"""
+    # 每步对应的合法标题正则:标题以 1-4 序号开头,紧跟理解/提炼/意象映射/转换
+    step_patterns = {
+        "理解": re.compile(r"^[1１][.\s、]*(理解)"),
+        "提炼": re.compile(r"^[2２][.\s、]*(提炼)"),
+        "意象映射": re.compile(r"^[3３][.\s、]*(意象映射|映射|意象)"),
+        "转换": re.compile(r"^[4４][.\s、]*(转换)"),
+    }
+    present = {step: False for step in step_patterns}
+    for _, title in headers:
+        for step, pattern in step_patterns.items():
+            if pattern.search(title):
+                present[step] = True
     return present
 
 
 def check_verify_section(headers, md: str):
-    """检查是否存在知识点校验小节。"""
-    for level, title in headers:
-        for kw in VERIFY_KEYWORDS:
-            if kw in title:
-                return True
-    # 也扫描正文(以防无标题但有小节内容)
-    for kw in VERIFY_KEYWORDS:
-        if kw in md:
-            return True
+    """检查是否存在知识点校验小节(要求独立标题+非空正文)。"""
+    lines = md.splitlines()
+    for i, (level, title) in enumerate(headers):
+        if "校验" in title:
+            # 检查该标题下是否有非空正文(取该标题到下一个同级或更高级标题之间的内容)
+            start = None
+            for j, line in enumerate(lines):
+                if title in line:
+                    start = j + 1
+                    break
+            if start is not None:
+                # 收集该标题后的正文,直到遇到下一个标题
+                body = []
+                for line in lines[start:]:
+                    if re.match(r"^#{1,6}\s+", line):
+                        break
+                    body.append(line)
+                body_text = "\n".join(body).strip()
+                if body_text:
+                    return True
     return False
 
 
@@ -132,37 +165,41 @@ def check_knowledge_coverage(md: str):
 
     逻辑:
       1. 定位"### 2. 提炼"到"### 3."之间的文本,提取列表项(`-` 开头行)
-         中的关键词(取冒号前的部分;若无冒号,则取整项内容)。
+         中的关键词。跳过模板提示语行(如"关键概念/变量:"等表头)。
       2. 定位"### 4. 转换"到"### 知识点校验"之间的文本作为故事正文。
-      3. 逐个检查关键词是否在故事正文中出现。
+      3. 逐个检查关键词是否在故事正文中出现(子串匹配)。
       4. 返回 (覆盖率字符串, 未覆盖关键词列表, 已覆盖关键词列表)。
-         覆盖率字符串形如 "4/5 = 80%"。
     """
-    # 第2步(提炼)正文:从"### 2. 提炼"到下一个"### 3."之前
     m_refine = re.search(
         r"###\s*2[.\s]*提炼(.*?)(?=###\s*3[.\s])",
         md,
         re.DOTALL,
     )
     keywords = []
+    # 模板提示语,跳过这些行
+    TEMPLATE_HINTS = {"关键概念", "关键", "变量", "约束", "关系", "核心", "硬核要素", "必须保留"}
     if m_refine:
         refine_text = m_refine.group(1)
         for line in refine_text.splitlines():
             stripped = line.strip()
             if stripped.startswith("-"):
-                # 去掉前导 "-"
                 item = stripped.lstrip("-").strip()
                 if not item:
                     continue
-                # 取冒号(中/英)前的部分作为关键词;若无冒号,整项作为关键词
+                # 取冒号前部分
                 if ":" in item or "\uff1a" in item:
-                    kw = re.split(r"[:\uff1a]", item, 1)[0].strip()
+                    kw = re.split(r"[:\uff1a]", item, maxsplit=1)[0].strip()
                 else:
                     kw = item
+                # 跳过模板提示语
+                if kw in TEMPLATE_HINTS or len(kw) < 2:
+                    continue
+                # 跳过以"关键"/"变量"等开头的表头行
+                if any(kw.startswith(h) for h in ["关键", "变量", "约束", "关系", "核心", "必须", "硬核"]):
+                    continue
                 if kw:
                     keywords.append(kw)
 
-    # 第4步(转换)正文:从"### 4. 转换"到"### 知识点校验"之前
     m_story = re.search(
         r"###\s*4[.\s]*转换(.*?)(?=###\s*知识点校验)",
         md,
@@ -192,15 +229,22 @@ def check_knowledge_coverage(md: str):
 def count_words(md: str) -> int:
     """
     统计粗略字数:中文字符数 + 英文单词数。
-
-    实现:
-      - 中文字符:用正则 [\\u4e00-\\u9fff] 统计数量。
-      - 英文单词:用正则 [a-zA-Z]+ 统计数量。
-      - 返回两者之和。
-    注:不去除 markdown 标记符号,粗略统计即可。
+    先剥离 Markdown 标记(标题#、表格|、HTML标签、注释、分隔线)。
     """
-    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", md))
-    english_words = len(re.findall(r"[a-zA-Z]+", md))
+    text = md
+    # 剥离 HTML 标签(如 <details> </details>)
+    text = re.sub(r"<[^>]+>", "", text)
+    # 剥离 HTML 注释
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    # 剥离 Markdown 标题标记(#)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # 剥离表格分隔行与分隔符
+    text = re.sub(r"^\|[\s\|:|-]+\|?$", "", text, flags=re.MULTILINE)
+    text = text.replace("|", " ")
+    # 剥离水平分隔线
+    text = re.sub(r"^---+\s*$", "", text, flags=re.MULTILINE)
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", text))
+    english_words = len(re.findall(r"[a-zA-Z]+", text))
     return chinese_chars + english_words
 
 
@@ -379,6 +423,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="以 JSON 格式输出结果(便于脚本消费)",
     )
+    parser.add_argument(
+        "--level",
+        choices=["simple", "moderate", "professional"],
+        default=None,
+        help="指定目标输出层次,对该层次做精准字数 PASS/FAIL(simple/moderate/professional)",
+    )
     return parser
 
 
@@ -387,13 +437,21 @@ def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # 优先级:位置参数 file > --file
     path = args.file or args.file_opt
     if not path:
         parser.error("请提供 markdown 文件路径(位置参数或 --file)。")
 
     md = read_file(path)
     result = analyze(md)
+
+    target_level = args.level
+    level_ok = None
+    level_msg = None
+    if target_level:
+        wc = result["word_count"]
+        level_ok, level_msg = check_level_word_count(wc, target_level)
+        if not level_ok and result["verdict"] == "PASS":
+            result["verdict"] = "FAIL"
 
     if args.json:
         out = {
@@ -405,9 +463,14 @@ def main(argv=None) -> int:
             "word_count": result["word_count"],
             "verdict": result["verdict"],
         }
+        if target_level:
+            out["level_check"] = {"level": target_level, "ok": level_ok, "msg": level_msg}
         print(json.dumps(out, ensure_ascii=False, indent=2))
     else:
-        print(result["report"])
+        report = result["report"]
+        if target_level:
+            report += f"\n【6】目标层次校验({target_level})\n    {level_msg}\n    判定: {'OK' if level_ok else 'FAIL'}\n"
+        print(report)
 
     return 0 if result["verdict"] == "PASS" else 1
 
