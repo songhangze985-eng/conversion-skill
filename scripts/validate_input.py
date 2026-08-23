@@ -3,9 +3,9 @@
 输入校验脚本 (validate_input.py)
 
 用途:
-    为"转换skill"(把晦涩专业知识转为二次元故事风格)做前置输入校验。
-    接收一段文本(命令行参数或 stdin),判断是否为空、是否像闲聊、是否含 LaTeX 公式,
-    并给出建议动作(proceed / explain_formula_first / ask_for_input)。
+    为 conversion skill 做前置输入校验。
+    判断空输入、闲聊、公式、过大文件、是否点名万字。
+    建议动作: proceed / explain_formula_first / ask_for_input / refuse_volume / refuse_length。
 
 用法:
     python validate_input.py "贝叶斯定理 P(A|B) = ..."
@@ -15,7 +15,8 @@
 
 输出:
     JSON 到 stdout,字段:
-      is_empty, is_chitchat, has_formula, has_mixed_content, recommend_level, recommend_action
+      is_empty, is_chitchat, has_formula, has_mixed_content, is_too_large,
+      wants_longform, recommend_level, recommend_action
 
 仅依赖 Python 标准库 (json, argparse, sys, re)。
 Windows 兼容。
@@ -161,70 +162,65 @@ def has_mixed_content(text: str) -> bool:
     return count >= 2
 
 
-def recommend(is_empty: bool, is_chitchat: bool, has_formula: bool) -> str:
-    """根据三项判定给出建议动作。"""
+LARGE_INPUT_CHARS = 6000
+LONGFORM_HINTS = ("10000", "一万", "万字", "大量文本", "专业层", "长篇连载", "写水文")
+EXPAND_HINTS = ("详细一点", "再展开", "写成篇", "展开讲")
+
+
+def is_too_large_text(text: str) -> bool:
+    return bool(text) and len(text) >= LARGE_INPUT_CHARS
+
+
+def wants_longform_text(text: str) -> bool:
+    if not text:
+        return False
+    return any(h in text for h in LONGFORM_HINTS)
+
+
+def recommend(is_empty: bool, is_chitchat: bool, has_formula: bool,
+              too_large: bool, longform: bool) -> str:
     if is_empty:
         return "ask_for_input"
-    if has_formula:
-        return "explain_formula_first"
     if is_chitchat:
         return "ask_for_input"
+    if too_large:
+        return "refuse_volume"
+    if longform:
+        return "refuse_length"
+    if has_formula:
+        return "explain_formula_first"
     return "proceed"
 
 
 def recommend_output_level(text: str) -> str:
-    """
-    基于文本特征的启发式输出层次推荐。
-
-    评估逻辑:
-      - 计算文本长度(字符数)
-      - 计算术语密度:统计 text 中出现 KNOWLEDGE_HINTS 关键词的数量(不重复计数)
-      - 文本长度 < 500 且 术语命中数 < 3 → "简约"
-      - 文本长度 > 2000 且 术语命中数 >= 5 → "专业"
-      - 其余 → "适中"
-    """
+    """默认简约。仅当用户要展开/长篇，或输入极大时改档。"""
     if not text:
-        return "适中"
-
-    length = len(text)
-    # 统计不重复命中的关键词数量
-    hit_count = 0
-    for kw in KNOWLEDGE_HINTS:
-        if re.search(r"[A-Za-z]", kw):
-            # 英文词用词边界匹配
-            if re.search(r"\b" + re.escape(kw) + r"\b", text, re.IGNORECASE):
-                hit_count += 1
-        else:
-            # 中文词用子串匹配
-            if kw in text:
-                hit_count += 1
-        if hit_count >= 5:
-            # 达到专业阈值上限即可提前结束,避免无谓遍历
-            break
-
-    if length < 500 and hit_count < 3:
         return "简约"
-    # 密度优先:术语命中数≥5 即允许专业档(即使文本较短)
-    if hit_count >= 5:
-        return "专业"
-    if length > 2000 and hit_count >= 3:
-        return "专业"
-    return "适中"
+    if wants_longform_text(text):
+        return "长篇"
+    if any(h in text for h in EXPAND_HINTS):
+        return "展开"
+    if is_too_large_text(text):
+        return "简约"
+    return "简约"
 
 
 def analyze(text: str) -> dict:
-    """对文本做完整分析,返回结果字典。"""
     empty = is_empty_text(text)
     chitchat = is_chitchat_text(text)
     formula = has_formula_text(text)
     mixed = has_mixed_content(text)
-    action = recommend(empty, chitchat, formula)
+    too_large = is_too_large_text(text)
+    longform = wants_longform_text(text)
+    action = recommend(empty, chitchat, formula, too_large, longform)
     level = recommend_output_level(text)
     return {
         "is_empty": empty,
         "is_chitchat": chitchat,
         "has_formula": formula,
         "has_mixed_content": mixed,
+        "is_too_large": too_large,
+        "wants_longform": longform,
         "recommend_level": level,
         "recommend_action": action,
     }
