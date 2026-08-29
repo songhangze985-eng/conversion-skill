@@ -101,15 +101,7 @@ Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.grok\skills\conversion"
 | 门禁 | 外行能用一句大白话复述「它在干什么」 | — |
 | 校验 | 文末 1–3 句严谨复述原文 | — |
 
-点名「写一万字 / 大量文本」或丢来很大的文件时，技能会先用番茄作家口吻回一句，再请你缩小范围或接受短稿。这些句子只对使用者说，**不写进知识正文**。
-
-| 情况 | 回复 |
-|------|------|
-| 写到一半卡住 | 卡文了，稍等 |
-| 交不出稿 | 封禁中 |
-| 文件太大 | 没有稿费我可不写 |
-| 点名万字 | 这么多！是让我写水文吗 |
-| 催更且做不到立刻交 | 水文ing，有事请拨打10086 |
+点名「写一万字 / 大量文本」或丢来很大的文件时，技能会先用番茄作家口吻回一句，再请你缩小范围或接受短稿。原句只住在 [`references/author-voice.md`](references/author-voice.md)，**不写进知识正文**。
 
 空闲聊不会回「封禁中」。内容安全拒写走宿主规则，不套这个梗。
 
@@ -180,7 +172,7 @@ stdout 为 JSON：`is_empty`、`is_chitchat`、`has_formula`、`has_mixed_conten
 | `--level` | `default` | `default` ≤800 · `expand` 800–2500 · `long` 不限 |
 | `--json` | 关 | JSON 输出 |
 
-PASS 条件：有映射表、有非空「知识点校验」、正文篇幅落在指定档。概念覆盖只作报告，不用术语是否原词出现卡死白话正文。
+PASS 条件：有映射表、有非空「知识点校验」、正文篇幅落在指定档、正文和校验里没有情况回复原句。概念覆盖只作报告，不用术语是否原词出现卡死白话正文。
 
 ## 仓库结构
 
@@ -202,7 +194,7 @@ conversion/
 │   └── long-article-engine.md       # 仅用户明确要长文时
 ├── assets/templates/
 │   ├── article-output-template.md   # 折叠分析 + 单次正文
-│   ├── four-step-template.md        # 五步骨架
+│   ├── five-step-template.md        # 骨架入口（实际由 generate_template.py 生成）
 │   └── character-archetypes.md      # 角色原型（皮肤按需读取）
 └── evals/
     ├── cases.md                     # 评测题
@@ -211,6 +203,8 @@ conversion/
 ```
 
 评测题与触发样本见 [`evals/`](evals/)。对照写法见 [`references/domain-examples.md`](references/domain-examples.md)。
+
+`SKILL.md` 是给模型的工作流：触发靠 description，正文靠五步，交稿靠 Verification。README 只给人看怎么装、怎么用。
 
 ## FAQ
 

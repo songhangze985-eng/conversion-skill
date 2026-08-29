@@ -17,20 +17,31 @@ LEVEL_DESC = {
 
 
 def render(topic: str, style: str, level: str, with_formula: bool) -> str:
-    lines = [
+    """Emit the same layout as assets/templates/article-output-template.md."""
+    parts = [
         f"# {topic}",
         "",
         f"> 皮肤:**{style}** — {STYLE_DESC[style]}",
         f"> 篇幅:**{level}** — {LEVEL_DESC[level]}",
         "",
+        "<details>",
+        "<summary>分析过程（点击展开）</summary>",
+        "",
     ]
     if with_formula:
-        lines += ["## 公式含义", "", "- 每个符号在干什么：", "- 整句大白话：", ""]
-    lines += [
+        parts += [
+            "### 公式含义",
+            "",
+            "- 每个符号在干什么：",
+            "- 整句大白话：",
+            "",
+        ]
+    parts += [
         "### 1. 理解",
         "",
         "- 原文含义复述：",
         "- 核心难点：",
+        "- 假设：",
         "",
         "### 2. 提炼",
         "",
@@ -44,21 +55,25 @@ def render(topic: str, style: str, level: str, with_formula: bool) -> str:
         "| --- | --- | --- |",
         "|  |  |  |",
         "",
-        "### 4. 转换",
-        "",
-        f"<!-- {STYLE_DESC[style]} {LEVEL_DESC[level]} 机制在情节里发生。 -->",
-        "",
         "### 门禁自检",
         "",
         "- 会皱眉的词：",
         "- 外行复述：",
+        "",
+        "</details>",
+        "",
+        "## 正文",
+        "",
+        f"> 篇幅：{level} | 皮肤：{style}",
+        "",
+        f"<!-- {STYLE_DESC[style]} {LEVEL_DESC[level]} 机制在情节里发生。 -->",
         "",
         "### 知识点校验",
         "",
         "- 1-3 句严谨复述：",
         "",
     ]
-    return "\n".join(lines)
+    return "\n".join(parts)
 
 
 def main(argv=None) -> int:

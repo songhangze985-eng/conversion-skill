@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-输出校验：验映射表、知识点校验、默认篇幅、概念覆盖。
+输出校验：验映射表、知识点校验、默认篇幅、情况句泄漏、概念覆盖。
 风格关键词（咖啡馆/酱/然而）不再决定 PASS。
 
 用法:
@@ -22,6 +22,14 @@ LEVELS = {
     "expand": (800, 2500),
     "long": (0, None),
 }
+# 只允许出现在对使用者的情况行，禁止进正文和校验。原句见 references/author-voice.md
+VOICE_LEAKS = (
+    "卡文了，稍等",
+    "封禁中",
+    "没有稿费我可不写",
+    "这么多！是让我写水文吗",
+    "水文ing，有事请拨打10086",
+)
 
 
 def read_file(path: str) -> str:
@@ -89,6 +97,20 @@ def story_body(md: str) -> str:
     return m.group(1) if m else md
 
 
+def verify_text(md: str) -> str:
+    m = re.search(r"#{1,6}\s*.*知识点校验\s*\n+(.*?)(?=\n#{1,6}\s|\Z)", md, re.DOTALL)
+    if m:
+        return m.group(1)
+    if "知识点校验" in md:
+        return md.split("知识点校验", 1)[-1]
+    return ""
+
+
+def voice_leaks_in(md: str) -> list:
+    hay = story_body(md) + "\n" + verify_text(md)
+    return [p for p in VOICE_LEAKS if p in hay]
+
+
 def coverage(md: str):
     kws = extract_keywords(md)
     body = story_body(md)
@@ -117,7 +139,9 @@ def analyze(md: str, level: str):
         level_msg = f"默认期望 ≤{hi}，实际 {wc}"
     covered, missing = coverage(md)
     cover_ok = True
-    verdict = "PASS" if mapping and verify and level_ok else "FAIL"
+    leaks = voice_leaks_in(md)
+    leak_ok = not leaks
+    verdict = "PASS" if mapping and verify and level_ok and leak_ok else "FAIL"
     return {
         "has_mapping_table": mapping,
         "has_verify": verify,
@@ -125,6 +149,8 @@ def analyze(md: str, level: str):
         "level": level,
         "level_ok": level_ok,
         "level_msg": level_msg,
+        "voice_leaks": leaks,
+        "leak_ok": leak_ok,
         "covered": covered,
         "missing": missing,
         "cover_ok": cover_ok,
@@ -138,6 +164,7 @@ def render(result: dict) -> str:
         f"  映射表: {'OK' if result['has_mapping_table'] else 'MISSING'}",
         f"  知识点校验: {'OK' if result['has_verify'] else 'MISSING'}",
         f"  篇幅: {result['level_msg']} ({'OK' if result['level_ok'] else 'FAIL'})",
+        f"  情况句泄漏: {'OK' if result['leak_ok'] else 'LEAK ' + str(result['voice_leaks'])}",
         f"  概念覆盖: {len(result['covered'])}/{len(result['covered'])+len(result['missing'])}",
     ]
     if result["missing"]:
@@ -147,7 +174,7 @@ def render(result: dict) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="校验转换结果：映射表、校验段、篇幅、覆盖。")
+    parser = argparse.ArgumentParser(description="校验转换结果：映射表、校验段、篇幅、情况句泄漏、覆盖。")
     parser.add_argument("file", nargs="?", help="markdown 路径")
     parser.add_argument("-f", "--file", dest="file_opt")
     parser.add_argument("--json", action="store_true")

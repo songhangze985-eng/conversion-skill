@@ -1,6 +1,6 @@
 # description 触发样本
 
-OptimizeDescription 用。应触发 / 不应触发大约一半对一半。
+OptimizeDescription 用。应触发 / 不应触发大约一半对一半。反例必须是近邻域，不能是「写个斐波那契」这种一眼无关。
 
 ## 应触发
 
@@ -14,6 +14,9 @@ OptimizeDescription 用。应触发 / 不应触发大约一半对一半。
 8. 用校园故事讲共识算法
 9. 把这段晦涩文本变得好懂
 10. 操作步骤也太绕了，讲人话，但步骤别丢
+11. 这段看了三遍还是懵，你讲人话（没说「转换」）
+12. can you explain this majority-vote protocol like a story? I still don't get it
+13. 把互斥锁讲得我能复述给室友
 
 ## 不应触发
 
@@ -27,3 +30,6 @@ OptimizeDescription 用。应触发 / 不应触发大约一半对一半。
 8. 总结一下会议纪要
 9. 用 STE 英语重写航空手册
 10. 继续上次没写完的长篇小说第三章
+11. 给这篇博客起一个二次元标题
+12. 评审这段快排实现有没有 off-by-one
+13. 把会议纪要写得通俗一点
