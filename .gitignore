@@ -1,25 +1,28 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-.eggs/
+# Bun / Node
+node_modules/
+.bun/
 dist/
 build/
 
-# 虚拟环境
-venv/
-env/
-.venv/
-ENV/
+# Local credentials
+.env*
+!.env.example
+*.pem
+*.p12
+*.pfx
 
-# 测试临时文件
+# Legacy Python cache (ignore stale files from pre-migration checkouts)
+__pycache__/
+*.py[cod]
+
+# 测试临时文件（PDF 评测工具还会拒绝将产物写入仓库）
 test_result.md
 pass_test.md
 *_test.md
 test_*.md
+.local-eval/
+pdf-evaluation/
+evaluation-output/
 
 # IDE / 编辑器
 .vscode/

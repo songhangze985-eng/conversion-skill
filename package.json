@@ -1,0 +1,19 @@
+{
+  "name": "conversion-skill",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Local Bun/TypeScript validation and isolated PDF-evaluation helpers for conversion-skill.",
+  "type": "module",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "validate-input": "bun scripts/validate-input.ts",
+    "generate-template": "bun scripts/generate-template.ts",
+    "check-output": "bun scripts/check-output.ts",
+    "evaluate-pdf": "bun scripts/evaluate-pdf.ts"
+  },
+  "dependencies": {
+    "pdfjs-dist": "5.6.205"
+  }
+}

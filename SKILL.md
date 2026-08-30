@@ -1,138 +1,143 @@
 ---
-name: conversion
-description: "把晦涩、读不懂的专业知识转成普通人听得懂、听完能复述的短文。默认二次元轻小说皮肤，必须先过「老妪能解」门禁。Use when the user says 看不懂, 太抽象, 用比喻/故事讲清楚, 二次元风格解释, 转换这段, 老妪能解, don't understand this formula/protocol, explain with an analogy or story, or wants a mechanism-preserving explanation — even if they never say conversion. NOT FOR one-line ELI5 without a mapping table, original fiction, image generation, language translation, meeting notes, or code review."
+name: conversion-skill
+description: "把晦涩的专业知识或可读取的学术论文，转换成普通读者能复述的短解释，并保留可核对的概念—意象映射与事实校验。默认使用二次元轻小说表达；也适用于用户明确要求侦探推理、项目战情室或自然纪录片表达。论文先建立带页码锚点的临时事实清单，再解释核心贡献。Use whenever the user says 看不懂、太抽象、讲人话、用比喻/故事讲清楚、老妪能解，或 asks for a mechanism-preserving explanation of a formula, protocol, system, or academic paper. NOT FOR raw PDF text extraction, one-line ELI5 without a mapping, original fiction, translation, meeting-note summarization, or code review."
 license: MIT
+compatibility: "Core workflow is host-agnostic. Optional local validation and paper navigation require Bun >=1.1; PDF extraction additionally uses the bundled pdfjs-dist dependency."
 metadata:
   author: songhangze985-eng
-  version: "1.1.0"
+  version: "2.0.0"
 ---
 
-# conversion
+# conversion-skill
 
-把「读了好几遍还不懂」的专业知识，变成能念给外行听、听完能复述的短文。二次元是默认皮肤，不是目的。正确性与听得懂冲突时，正确性优先；皮肤味道与听得懂冲突时，听得懂优先。
+把「读了好几遍还不懂」的专业知识，变成能念给外行听、听完能复述的短解释。表达方式是服务知识的皮肤：事实优先于好看，听得懂优先于口癖，机制同构优先于表面像。
 
 ## When to Use
 
-已触发仍先确认：用户要的是「把难知识讲懂」，并留下可核对的映射。即使用户没说「转换」，看不懂 / 太抽象 / 比喻 / 故事 / 老妪能解 也走本流程。
+用户要的是把难知识讲懂，并保留可核对的映射时使用本技能。即使用户没说「转换」，看不懂、太抽象、讲人话、比喻、故事、老妪能解，以及「解释这篇论文的核心贡献」都走本流程。
 
-**Not for:** 只要一句话、不要映射表；写小说或续写长篇；画图；中英互译；会议纪要；代码审查。误触发则停，改走宿主默认能力，不硬套五步。
+**Not for:** 只要一句话且不要映射；原创新小说或续写；画图；中英互译；会议纪要；代码审查；只想从 PDF 导出原始文字。误触发时停下，改走宿主默认能力，不硬套本技能。
 
-## 读什么
+## 核心约束
 
-| 何时 | 文件 |
-|------|------|
-| 第 3 步选意象卡住 | `references/mapping-principles.md` |
-| 写完正文、过门禁前 | `references/lao-yu-gate.md` |
-| 套二次元皮肤（默认） | `references/style-anime.md`；角色不够用再读 `assets/templates/character-archetypes.md` |
-| 卡文 / 催更 / 万字 / 大文件 | `references/author-voice.md`，只用表内原句 |
+1. 先建立事实清单，再选叙事；不为风格补写原文没有的因果、数据或结论。
+2. 每个关键概念有稳定的故事元素，机制步骤与输入/输出可逐步对照。
+3. 第一次出现的必要术语先用动作解释；读者应能说出「它在干什么、受什么约束、看走眼会怎样」。
+4. 任一风格无法保留上述对应关系时，降为中性说明，而不是强行套皮肤。
+
+## 资源路由
+
+| 何时 | 读取或运行 |
+|---|---|
+| 第 3 步选意象或检查同构 | `references/mapping-principles.md` |
+| 第 4 步选择表达方式 | `references/style-selector.md`，再只读选中风格的文件 |
+| 默认二次元 | `references/style-anime.md`；角色不够用再读 `assets/templates/character-archetypes.md` |
+| 侦探推理 / 项目战情室 / 自然纪录片 | 分别读 `references/style-detective.md`、`references/style-war-room.md`、`references/style-nature-documentary.md` |
+| 可读取的学术论文或 PDF | `references/paper-navigation.md` |
+| 写完正文、过通用门禁前 | `references/lao-yu-gate.md` |
+| 卡文、催更、万字或无法读取的超大文件 | `references/author-voice.md`，只用表内原句 |
 | 想对照写法 | `references/domain-examples.md` |
 | 用户明确要长篇 | `references/long-article-engine.md` |
 | 排版 | `assets/templates/article-output-template.md` |
-| 输入可能空 / 闲聊 / 过大 / 点名万字 | 有 Python 时跑 `scripts/validate_input.py` |
-| 交稿前结构自检 | 有 Python 时跑 `scripts/check_output.py` |
+| 需要空白骨架 | `bun run generate-template -- -t "<知识点>" -s <style> -l <default|expand|long>` |
+| 输入分类 | `bun run validate-input -- "<输入>"`；标准输入用 `-` |
+| 交稿前结构自检 | `bun run check-output -- <result.md> --level <default|expand|long> --style <style> [--facts <绝对临时事实清单.json>]` |
+| 本地论文评测 | `bun run evaluate-pdf -- <pdf-path> --style <style> --workspace <绝对、空、无 .git 的临时目录> [--render]` |
 
-情况回复的台词只住在 `author-voice.md`。映射原则只住在 `mapping-principles.md`。门禁规则只住在 `lao-yu-gate.md`。
+情况回复只住在 `author-voice.md`；映射原则只住在 `mapping-principles.md`；风格细节只住在各自风格文件；门禁规则只住在 `lao-yu-gate.md`。不要把这些规则复制进正文。
 
-## 五步
+## 工作流
 
-按顺序做。1–3 步与门禁草稿放进 `<details>`，用户第一眼只看到正文。正文只出现一次。
+按顺序做。第 1–3 步与门禁草稿放进 `<details>`；用户第一眼只看到一篇正文与知识点校验。
+
+### 0. 论文导航（仅论文输入）
+
+先读 `references/paper-navigation.md`。从题目、摘要、方法、结论建立**临时**事实清单，并为每条事实记下页码锚点。事实清单与锚点只能留在折叠分析或仓库外的临时评测目录；默认只解释论文的核心贡献，不把整篇论文改写成故事。
+
+文本层不可读、页码内容与抽取文本矛盾、或资料不足以确定关键机制时，说明缺口并请用户指定页码或提供可读文本；不得猜测。可读取的学术论文不因全文较长而直接拒绝。
 
 ### 1. 理解
 
-用自己的话复述；标出最难点和你做的假设。理解偏差必须在这里暴露，不能带进故事。
+用自己的话复述请求的范围；标出最难点与必要假设。对论文，范围默认是「核心贡献」；用户点名某节、某张图或某个结论时，以该范围为准。
 
 ### 2. 提炼
 
-列出概念、关系、约束。不增不减。这是后面映射的事实清单。
-
-含公式时：先用大白话解释公式，再提炼。
+列出概念、关系、顺序与约束，组成后续校验用的事实清单。不增不减。含公式时，先用大白话说清公式在做什么，再拆变量与条件。
 
 ### 3. 意象映射
 
-每个关键概念对应一个故事元素。形似不够，机制必须同构。冲突时保真优先。约束要变成故事里的规则。细则读 `references/mapping-principles.md`。
-
-输出一张表：知识概念 | 故事元素 | 对应理由。
+每个关键概念对应一个故事元素。形似不够，机制必须同构；约束要变成可见规则。输出一张「知识概念｜故事元素｜对应理由」表；细则读 `references/mapping-principles.md`。
 
 ### 4. 转换
 
-套当前皮肤写正文。未指定皮肤则用二次元，读 `references/style-anime.md`。机制必须在情节里发生，不靠旁白讲义。
+先按 `references/style-selector.md` 确定表达方式，默认 `anime`。所选风格只决定怎么演，不改变事实清单、映射表或门禁。
 
-| 档 | 何时 | 字数 |
-|----|------|------|
-| 默认 | 未声明 | **≤800 字** |
-| 展开 | 用户说详细一点 / 再展开 / 写成篇 | 800–2500 字 |
-| 长篇 | 用户明确要连载 / 长文 | 不靠字数充深度；先读 `author-voice.md` |
+| 篇幅档 | 何时 | 正文长度 |
+|---|---|---|
+| `default` | 未声明 | **≤800 字** |
+| `expand` | 用户说详细一点、再展开、写成篇 | 800–2500 字 |
+| `long` | 用户明确要连载或长文 | 不靠字数充深度；先读 `author-voice.md` |
 
-点名「一万字 / 专业长文 / 大量文本」时，先按 `author-voice.md` 回一句，再交默认短稿，除非用户确认就要长。
+点名一万字、专业长文或逐页全量改写时，按 `author-voice.md` 先做情况回复，再给可执行的降档选择。论文的「核心贡献」导航不属于逐页全量改写。
 
-### 5. 老妪能解门禁
+### 5. 通用可懂门禁
 
-读 `references/lao-yu-gate.md`，按它改到能过关，再交稿。过关后再写「知识点校验」：1–3 句严谨复述原文，不写进故事腔。
+读 `references/lao-yu-gate.md`，按它改到能过关，再写「知识点校验」：1–3 句严谨复述事实清单，不使用故事腔。这个门禁对所有风格都相同。
 
 ## 输出骨架
 
-用 `assets/templates/article-output-template.md`。结构是：折叠分析（1–3 步 + 门禁自检）→ 一篇正文 → 知识点校验。
+使用 `assets/templates/article-output-template.md`。标题下必须有：
 
-需要空白骨架且有 Python 时：`python` 或 `py -3` 运行 `scripts/generate_template.py -t "<知识点>"`。
+```markdown
+> 表达风格：`<anime|detective|war-room|nature-documentary|neutral>`
+> 篇幅：`<default|expand|long>`
+```
 
-## 输入
+结构为：折叠分析（理解、事实清单、映射、风格选择、门禁自检）→ 一篇正文 → 知识点校验。论文事实清单与页码锚点只能留在折叠分析或临时评测；正常交稿只有在用户要求来源时才展示锚点。
 
-- 空输入 / 纯闲聊：请对方给一段要转换的知识。不要回「封禁中」。
-- 很大的文件：按 `author-voice.md` 回一句，请对方圈一个知识点，不要硬吞全文。
-- 操作步骤类（怎么做）：轻故事包装，步骤保留为可执行清单，不融进剧情；默认轻度皮肤。
+## 输入边界
+
+- 空输入或纯闲聊：请用户给一段要转换的知识；不要回「封禁中」。技术主题中的日常词（例如天气）不能单独当作闲聊证据。
+- 可读取学术论文：走论文导航；默认抓核心贡献，不能因全文体积而拒绝。
+- 无法读取的文件、或要求逐页逐句全量改写：按 `author-voice.md` 回应，并请用户圈定范围或提供文本。
+- 操作步骤类：保留可执行清单，不融进闯关剧情；表达方式默认选轻度或中性。
 - 默认中文；用户声明其他语言再切换。
 
 ## 反向修正
 
-用户说某段没懂或有错：回到第 2 步定位节点 → 改第 3 步映射 → 只重写第 4 步对应片段 → 再过第 5 步。不重跑全场。
-
-## Common Rationalizations
-
-| Excuse | Reality |
-|--------|---------|
-| 映射表可以省，故事里都有了 | 反向修正和评测都靠表。没有表就没有同构证据 |
-| 我已经懂了，门禁可以跳 | 门禁是念给外行听，不是给作者听 |
-| 先写长再压缩 | 默认短。写长是用户要求，不是质量 |
-| 黑话更有二次元味 | 味道挡懂就是门禁失败；降浓度，不准用黑话换正确性 |
-| 操作步骤编成闯关更有趣 | 步骤类必须留下可执行清单，不融进剧情 |
-| 脚本可有可无所以交稿前不用跑 | 有 Python 就跑 `check_output.py`（`python` 或 `py -3`）；PASS 才交 |
-
-## Red Flags
-
-- 正文前铺着未折叠的 1–3 步
-- 同一篇文章贴了两遍
-- 没有映射表，或一格塞了多个无关概念
-- 术语解释术语（「后验等于似然乘先验」）
-- 校验段仍是故事腔
-- `author-voice.md` 里的情况句出现在正文或校验里
-- 操作步骤变成闯关副本
+用户说没懂或有错时：回到事实清单定位节点 → 修正映射 → 只重写受影响的正文片段 → 再过门禁。不要用更浓的风格掩盖错误。
 
 ## Verification
 
 交稿前确认：
 
-- [ ] 分析在 `<details>` 里；用户第一眼只有一篇正文
-- [ ] 映射表三列齐全，约束有对应规则
-- [ ] 正文落在当前篇幅档
-- [ ] 外行能用一句大白话复述「它在干什么」
-- [ ] 「知识点校验」1–3 句，非故事腔
-- [ ] 有 Python 时：`python` 或 `py -3` 运行 `scripts/check_output.py <result.md> --level <default|expand|long>`，结论为 PASS
+- [ ] 分析在 `<details>` 内；正文只出现一次。
+- [ ] 映射表三列齐全，每条约束都有对应规则。
+- [ ] 所有关键事实均在正文或知识点校验中被保留；论文事实都有临时页码锚点。严格论文评测中，每个 `[F#]` 同时出现在映射表与知识点校验。
+- [ ] 标题下的 `> 表达风格：` 与 `> 篇幅：` 标识正确；正文落在当前篇幅档。
+- [ ] 外行能用一句大白话复述机制；知识点校验 1–3 句且不是故事腔。
+- [ ] 有 Bun 时运行 `bun run check-output -- <result.md> --level <level> --style <style> [--facts <绝对临时事实清单.json>]`，结论为 PASS。
 
-**Success:** 外行能复述机制；校验段与原文一致；映射可逐步对照。  
-**Failure:** 听完仍要回到原文，或故事把机制讲反。
+**Success:** 外行能复述机制；校验段与事实清单一致；映射可逐步对照；表达没有增加理解门槛。
+**Failure:** 听完仍要回到原文，故事把机制讲反，或风格掩盖了约束。
 
-## Gotchas
+## Common Rationalizations
 
-- 二次元黑话（酱、中二咒文、专有名词墙）会变成新的晦涩。门禁失败就降皮肤浓度。
-- 形似不是神似。水杯水位不是贝叶斯；「凶手招供」也不是概率更新。
-- 情况回复只用 `author-voice.md` 表内原句，且只对使用者说。空闲聊不套「封禁中」。安全拒写走宿主规则。
+| 借口 | 事实 |
+|---|---|
+| 映射表可以省，故事里都有了 | 反向修正与同构校验都靠表；没有表就没有证据。 |
+| 我已经懂了，门禁可以跳 | 门禁是念给外行听，不是给作者听。 |
+| 论文太长，只能拒绝 | 先导航核心贡献；只有不可读或逐页全量改写才需要缩小范围。 |
+| 更像侦探 / 战情室 / 纪录片就更好 | 风格无法逐步对应机制时，降为中性说明。 |
+| 黑话更有味道 | 味道挡懂就是门禁失败；降浓度，不用黑话换正确性。 |
+| 操作步骤编成闯关更有趣 | 步骤必须保留可执行清单。 |
+| 本地论文评测结果可以写进 Skill | 评测产物只放绝对临时目录，不能进入技能、Git 或交稿正文。 |
 
-## 短示例（默认篇幅）
+## Red Flags
 
-**Input:** 贝叶斯定理 $P(A|B)=\dfrac{P(B|A)\,P(A)}{P(B)}$
-
-**正文（节选）：**
-
-异世界侦探社，雨夜。贝叶斯对嫌疑人 X 的初始怀疑只有三成——还没见到证据时的判断，叫先验。泥地里的脚印像 X 的限量靴：若他真是凶手，留下这脚印的可能有九成；可这靴子卖了不少，别人也会留，所以脚印总体并不罕见。「关键在分母。」她把「别人也会留」那部分扣掉。新怀疑度 = 脚印在凶手身上有多常见 × 原本怀疑 ÷ 脚印总体有多常见。数字跳出六成八。看到证据之后的判断，叫后验。限量不等于在这街区罕见，所以嫌疑没有飙到九成。
-
-**外行应能复述：** 有了新线索，要把「这线索有多能说明他有罪」和「这线索有多常见」一起算，不能只看表面稀有。
+- 正文前铺着未折叠的分析步骤，或同一篇文章贴了两遍。
+- 没有映射表；一格塞多个无关概念；或只形似、不神似。
+- 术语解释术语；约束只藏在括号里；故事用无依据的反转代替机制。
+- 将 `author-voice.md` 的情况句写进正文或知识点校验。
+- 把可读论文当作超大文件直接拒绝，或把不可靠的 PDF 抽取当作事实。
+- 把本地测试的论文、文本、截图、评分卡写入最终 Skill。

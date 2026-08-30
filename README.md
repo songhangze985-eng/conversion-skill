@@ -1,227 +1,116 @@
-# conversion
+# conversion-skill
 
-> An [Agent Skill](https://agentskills.io) that turns obscure professional text into something an ordinary listener can understand.
+> An [Agent Skill](https://agentskills.io) for turning dense technical knowledge into an explanation an ordinary reader can repeat correctly.
 
-读了好几遍还不懂的公式、协议、机理，转成能念给外行听、听完能复述的短文。默认用二次元轻小说当皮肤，但先过「老妪能解」门禁：不解则改。二次元是味道，不是目的。
+`conversion-skill` does not merely simplify wording. It first preserves the concepts, relationships, and constraints; then it maps them to a scene whose mechanism still behaves the same way. The final explanation includes a concise factual check so an entertaining expression cannot silently reverse the source.
 
-兼容任何实现 [Agent Skills](https://agentskills.io) 的宿主：Claude Code、Grok、Cursor、Codex、Copilot、TRAE、Gemini CLI 等。一份 `SKILL.md`，无第三方依赖。
+## What it is for
 
-[![Agent Skills](https://img.shields.io/badge/SKILL.md-open_standard-blue)](https://agentskills.io)
-[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-[![Python 3](https://img.shields.io/badge/python-3_stdlib-3776AB)](scripts/)
+Use it when a reader says a formula, protocol, paper, mechanism, or operating procedure is too abstract and asks for an analogy, a story, or a plain-language explanation. Natural-language requests are enough; this release does not promise the legacy `/conversion` shortcut.
 
-## 它做什么
+The core skill is portable Agent Skills Markdown. Optional local helpers require Bun and are useful for repeatable structure checks and PDF evaluation.
 
-| 输入 | 输出 |
-|------|------|
-| 贝叶斯定理公式 | 侦探按新脚印改写怀疑度（先验 / 似然 / 后验能对上） |
-| 快速排序 | 运动会定达标线、分组、一组只剩一人就不比 |
-| Raft 共识 | 议会过半数抄完才敲槌，议长病倒再选，校史不改 |
-| Word「标题 1」再更新目录 | 轻度包装 + 可执行步骤清单，不编成闯关 |
+## Expression styles
 
-和通用 ELI5 的差别：必须有 **概念 ↔ 故事元素** 映射表，正文之后有 **知识点校验**，听得懂但不能把机制讲反。
+Anime remains the default. A user can request one of the following alternatives without changing the factual workflow.
 
-## 使用场景
+| Style id | Chinese request | Best for | Boundary |
+|---|---|---|---|
+| `anime` | 二次元 / 轻度 / 中二 | General concepts and vivid scenes | Existing light, standard, and heavy intensity levels remain anime-only. |
+| `detective` | 侦探推理 / 破案式 | Evidence, causes, hypotheses, probability updates | Do not invent guilt, motives, or evidence that is absent from the source. |
+| `war-room` | 项目战情室 / 指挥室 | Coordination, protocols, workflows, changing relationships | Roles and alerts must represent real constraints, not replace them. |
+| `nature-documentary` | 自然纪录片 / 观察镜头 | Time-space change, observation, and system dynamics | Keep causal rules explicit; atmosphere cannot become a substitute for explanation. |
 
-技能会在自然语言里自动触发。也可以显式调用 `/conversion`。
+All styles obey the same rule: when a scene cannot preserve the mechanism, lower the style intensity or use a neutral explanation instead of forcing a metaphor.
 
-**适合**
+## How the skill works
 
-```
-贝叶斯定理这个公式我看不懂，用比喻讲讲
-Raft 太抽象了，希望用故事讲清楚
-把这段分布式锁原理转成二次元风格
-抗体免疫机制讲得生动一点，我要能复述给别人
-这段论文腔完全读不懂，转换一下
-Word 里设标题再更新目录，步骤别丢，别写成玄幻
-老妪能解一下这段
-```
+1. **Understand** — Restate the source and make assumptions visible.
+2. **Extract facts** — List concepts, relationships, and constraints without adding or dropping any.
+3. **Map mechanisms** — Give each key concept one story element and explain why the actions are isomorphic.
+4. **Express** — Write one short, readable body in the selected style. The default body is at most 800 Chinese characters.
+5. **Check** — Run the lay-reader gate, then add a 1–3 sentence factual verification in a non-story voice.
 
-**指定档位（可选，可组合）**
+The analysis and mapping table stay folded in `<details>` so the reader sees one explanation first.
 
-```
-用轻度风格解释互斥锁          → 克制比喻，可几乎无角色
-用重度/中二风格讲 Raft         → 夸张对白；仍须先过门禁
-详细一点 / 再展开 / 写成篇     → 800–2500 字
-用英文输出                     → 默认中文，声明语言才切换
-```
+## Academic-PDF navigation
 
-**不适合**
+For a readable research PDF, the skill does not try to paraphrase every page. It identifies the paper's central contribution from the title, abstract, method, and conclusion; records a temporary fact ledger with page anchors; and explains that contribution by default.
 
-- 只要一句话 ELI5、不要映射表
-- 写原创小说、画二次元图
-- 中英互译
-- 纯闲聊（会请你贴一段要转换的知识）
+If the PDF contains several unrelated contributions, state the selected focus before writing. If the host cannot read the file reliably, ask for an abstract or selected pages instead of inventing missing facts. A large paper is therefore a navigation task, not an automatic refusal.
 
-## 快速开始
+## Install
 
-```bash
-npx skills add songhangze985-eng/conversion-skill
-```
-
-[skills CLI](https://github.com/vercel-labs/skills) 会检测本机已安装的 Agent（Claude Code、Cursor、Codex、Copilot、Gemini CLI 等），装到对应 skills 目录。文件夹名必须是 `conversion`。
-
-装好后直接说上面那些话即可，不必先打技能名。
-
-### 手动安装
-
-```bash
-git clone https://github.com/songhangze985-eng/conversion-skill.git
-```
-
-把仓库根目录拷到宿主的 skills 路径，并命名为 `conversion`：
-
-| 宿主 | 路径 |
-|------|------|
-| Claude Code | `~/.claude/skills/conversion/` |
-| Grok | `~/.grok/skills/conversion/` |
-| Cursor | `.cursor/skills/conversion/`（项目）或 `~/.cursor/skills/conversion/` |
-| Codex | `.codex/skills/conversion/` |
-| GitHub Copilot | `.github/skills/conversion/` |
-| TRAE | 对应 skills 根目录下的 `conversion/` |
-
-Windows 示例（Grok）：
+Install the repository as a skill directory named `conversion-skill` so the directory and the YAML `name` match:
 
 ```powershell
 git clone https://github.com/songhangze985-eng/conversion-skill.git
-Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.grok\skills\conversion"
+Copy-Item -Recurse conversion-skill "$env:USERPROFILE\\.codex\\skills\\conversion-skill"
 ```
 
-要求：目录内有 `SKILL.md`，YAML `name` 为 `conversion`（kebab-case）。不要用「转换skill」当技能名。
+For another Agent Skills host, copy the repository root into that host's skills directory with the same `conversion-skill` folder name. The important requirements are a visible `SKILL.md` and matching folder/metadata names.
 
-无终端时：下载 [SKILL.md](https://raw.githubusercontent.com/songhangze985-eng/conversion-skill/main/SKILL.md)，在 claude.ai **Settings → Capabilities → Skills** 上传并打开。
+## Optional local tools
 
-## 默认行为
+The helper scripts are intentionally optional. They use Bun and TypeScript; PDF evaluation additionally installs `pdfjs-dist@5.6.205`.
 
-| 项 | 默认 | 用户可改 |
-|----|------|----------|
-| 篇幅 | 正文 **≤800 字**（能一次念完） | 「详细一点」→ 800–2500；明确要长文才加长 |
-| 皮肤 | 二次元标准档：一场景、少量对话 | 「轻度」/「重度」「中二」 |
-| 版式 | 分析过程折叠，正文只出现一次 | — |
-| 门禁 | 外行能用一句大白话复述「它在干什么」 | — |
-| 校验 | 文末 1–3 句严谨复述原文 | — |
+```powershell
+bun install
 
-点名「写一万字 / 大量文本」或丢来很大的文件时，技能会先用番茄作家口吻回一句，再请你缩小范围或接受短稿。原句只住在 [`references/author-voice.md`](references/author-voice.md)，**不写进知识正文**。
+# Input routing and an empty five-step shell
+bun run validate-input "贝叶斯定理 P(A|B)=P(B|A)P(A)/P(B)"
+bun run generate-template --topic "快速排序" --style detective
 
-空闲聊不会回「封禁中」。内容安全拒写走宿主规则，不套这个梗。
+# Check a completed conversion against its structure and temporary fact ledger
+bun run check-output --file result.md --style detective --facts facts.json
 
-## 它怎么工作
-
-五步流水线。前三步给纠错用，默认折叠。
-
-1. **理解** — 用自己的话复述，标出最难点  
-2. **提炼** — 概念、关系、约束（事实清单）  
-3. **意象映射** — 每个概念对应一个故事元素；形似不够，机制必须同构（[mapping-principles.md](references/mapping-principles.md)）  
-4. **转换** — 套当前皮肤写出正文（默认 [style-anime.md](references/style-anime.md)）  
-5. **老妪能解** — 念给外行听，不懂就改，过关后再写知识点校验（[lao-yu-gate.md](references/lao-yu-gate.md)）
-
-用户说某段没懂：回到第 2 步定位 → 改映射 → 只重写对应片段 → 再过门禁。不重跑全场。
-
-操作步骤类知识（怎么做）：轻故事包装，步骤保留为清单，默认轻度皮肤。
-
-## 命令
-
-脚本可选。技能本体是 `SKILL.md`；脚本只做输入预检、骨架生成和结果校验。需要 **Python 3**，仅标准库，Windows / macOS / Linux 均可。
-
-在仓库根目录执行：
-
-```bash
-# 输入预检：空输入、闲聊、公式、过大文件、是否点名万字
-python scripts/validate_input.py "贝叶斯定理 P(A|B)=P(B|A)P(A)/P(B)"
-python scripts/validate_input.py "你好啊"
-python scripts/validate_input.py "请写成10000字"
-echo "今天天气不错" | python scripts/validate_input.py -
-
-# 生成五步骨架
-python scripts/generate_template.py --topic "快速排序"
-python scripts/generate_template.py --topic "区块链" --style heavy --level expand
-python scripts/generate_template.py --topic "递归" --style light --level default --with-formula
-
-# 校验一份转换结果（映射表、知识点校验、篇幅）
-python scripts/check_output.py result.md
-python scripts/check_output.py result.md --level default
-python scripts/check_output.py result.md --level expand --json
+# Prepare or grade a PDF only in an explicit temporary workspace
+bun run evaluate-pdf --help
 ```
 
-Windows 若 `python` 不可用，改用 `py -3 scripts/...`。
+`evaluate-pdf` is a local evaluator, not the skill's prose generator. It extracts text with PDF.js, can render selected pages with Poppler, and checks that the supplied result and fact ledger stay in an isolated workspace. It never runs Git commands.
 
-### `validate_input.py`
+## Local paper evaluation policy
 
-| 参数 | 说明 |
-|------|------|
-| `text` | 要校验的文本；`-` 或省略则读 stdin |
+For an acceptance run, export the skill to a temporary copy that excludes `.git`. Read source PDFs in place, keep extracted text, rendered pages, fact ledgers, conversion drafts, and grade cards only in that temporary directory, then remove it after reporting the verdict. Do not add PDFs, answers, screenshots, or paper-specific facts to this repository.
 
-stdout 为 JSON：`is_empty`、`is_chitchat`、`has_formula`、`has_mixed_content`、`is_too_large`、`wants_longform`、`recommend_level`（简约 / 展开 / 长篇）、`recommend_action`。
+The score is four dimensions, two points each:
 
-`recommend_action`：`proceed` · `explain_formula_first` · `ask_for_input` · `refuse_volume` · `refuse_length`。
+| Dimension | Full-score requirement |
+|---|---|
+| 能懂 | An outsider can restate the mechanism in one plain sentence. |
+| 保真 | The factual check and story preserve the source mechanism and constraints. |
+| 同构 | Every ledger fact has an explicit, non-colliding mapping. |
+| 表达不挡懂 | The chosen expression is memorable without adding jargon or unsupported drama. |
 
-### `generate_template.py`
+Only an 8/8 result, complete fact coverage, a passing structural check, and a clean temporary-workspace check count as acceptance. Preparation, rendering, and structural validation are timed separately from model prose generation.
 
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `-t, --topic` | （必填） | 知识点名称 |
-| `-s, --style` | `standard` | `light` · `standard` · `heavy` |
-| `-l, --level` | `default` | `default`（≤800）· `expand`（800–2500）· `long` |
-| `--with-formula` | 关 | 增加「公式含义」占位 |
+## Repository layout
 
-### `check_output.py`
-
-| 参数 | 默认 | 说明 |
-|------|------|------|
-| `file` / `-f` | （必填） | 转换结果 Markdown |
-| `--level` | `default` | `default` ≤800 · `expand` 800–2500 · `long` 不限 |
-| `--json` | 关 | JSON 输出 |
-
-PASS 条件：有映射表、有非空「知识点校验」、正文篇幅落在指定档、正文和校验里没有情况回复原句。概念覆盖只作报告，不用术语是否原词出现卡死白话正文。
-
-## 仓库结构
-
-```
-conversion/
-├── SKILL.md                         # 技能入口（宿主只认这个 name + description）
-├── LICENSE
-├── README.md
-├── scripts/
-│   ├── validate_input.py            # 输入预检
-│   ├── generate_template.py         # 五步骨架
-│   └── check_output.py              # 结果校验
-├── references/
-│   ├── mapping-principles.md        # 形似 / 神似 / 保真（核心方法）
-│   ├── lao-yu-gate.md               # 老妪能解门禁
-│   ├── style-anime.md               # 二次元皮肤
-│   ├── author-voice.md              # 番茄作家情况回复
-│   ├── domain-examples.md           # 短篇达标样例
-│   └── long-article-engine.md       # 仅用户明确要长文时
-├── assets/templates/
-│   ├── article-output-template.md   # 折叠分析 + 单次正文
-│   ├── five-step-template.md        # 骨架入口（实际由 generate_template.py 生成）
-│   └── character-archetypes.md      # 角色原型（皮肤按需读取）
-└── evals/
-    ├── cases.md                     # 评测题
-    ├── rubric.md                    # 能懂 / 保真 / 同构 / 皮肤不挡懂
-    └── description-triggers.md      # 应触发 / 不应触发样本
+```text
+conversion-skill/
+├── SKILL.md                    # Triggering and five-step workflow
+├── references/                 # Mapping, gate, paper navigation, and styles
+├── assets/templates/           # Folded-analysis output shells
+├── scripts/                    # Optional Bun/TypeScript local helpers
+└── evals/                      # Generic rubric and trigger examples only
 ```
 
-评测题与触发样本见 [`evals/`](evals/)。对照写法见 [`references/domain-examples.md`](references/domain-examples.md)。
-
-`SKILL.md` 是给模型的工作流：触发靠 description，正文靠五步，交稿靠 Verification。README 只给人看怎么装、怎么用。
+The repository deliberately contains no research-paper fixture, generated paper explanation, or scoring report.
 
 ## FAQ
 
-**故事会不会把原意讲歪？**  
-不会当作可接受结果。映射要求机制同构；文末用 1–3 句还原定义。趣味和正确性冲突时，正确性优先。
+**Does a special style change the facts?**
+No. Style only changes how the mechanism is staged. Facts, constraints, and the verification paragraph remain source-grounded.
 
-**为什么默认只有八百字？**  
-「老妪能解」的标准是听得懂，不是写得长。需要展开时说「详细一点」。点名万字会先按情况回复处理。
+**What if anime is not appropriate?**
+Request `侦探推理`、`项目战情室`、`自然纪录片`, or ask for a neutral explanation. The default never overrides reader preference.
 
-**必须跑脚本吗？**  
-不必。对话里触发技能即可。脚本给要预检输入或检查输出结构的人用。
+**Why is the paper not explained page by page?**
+The skill focuses on the paper's central contribution so a reader can understand and repeat it. It makes the chosen focus explicit and retains page anchors in temporary analysis.
 
-**能处理哪些领域？**  
-公式、算法、系统、生理、操作步骤等「是什么 / 为什么 / 怎么做」的专业知识。主观闲聊会请你改贴知识文本。
-
-**二次元看不懂怎么办？**  
-说「用轻度」。皮肤挡懂时，门禁会降浓度，不会用黑话换正确性。
+**Does local evaluation upload anything?**
+No. The evaluator works from a copy with no `.git` directory and never invokes `git add`, `commit`, `push`, or remote operations.
 
 ## License
 
