@@ -23,6 +23,7 @@ test_*.md
 .local-eval/
 pdf-evaluation/
 evaluation-output/
+evals/records/runs/
 
 # IDE / 编辑器
 .vscode/

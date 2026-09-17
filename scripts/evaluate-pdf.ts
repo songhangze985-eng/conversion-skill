@@ -338,7 +338,13 @@ async function main(argv: string[]): Promise<void> {
       structural_check: structuralCheck,
       human_rubric: {
         required_dimensions: ["能懂", "保真", "同构", "表达不挡懂"],
-        rule: "四项均需人工或独立模型给出 2/2，才可宣称总分 8/8。",
+        rule: "四项均需人工或独立模型给出 2/2，才可宣称总分 8/8。结构检查 PASS 或事实 ID 覆盖 PASS 都不能代替语义质量或用户理解。",
+      },
+      mechanical: {
+        structure_verdict: structuralCheck.structure_verdict,
+        term_id_coverage_verdict: structuralCheck.term_id_coverage_verdict,
+        semantic_quality_verdict: structuralCheck.semantic_quality_verdict,
+        comprehension_verdict: structuralCheck.comprehension_verdict,
       },
       verdict: structuralCheck.verdict === "PASS" ? "PENDING_HUMAN_8_OF_8_REVIEW" : "STRUCTURAL_FAIL",
     }, null, 2)}\n`, "utf8");

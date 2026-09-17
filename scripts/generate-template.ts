@@ -29,6 +29,7 @@ export function renderTemplate(
   level: OutputLevel,
   withFormula: boolean,
   intensity = "standard",
+  withComprehension = false,
 ): string {
   const formulaSection = withFormula
     ? `### 公式含义
@@ -37,6 +38,16 @@ export function renderTemplate(
 - 整句大白话：
 
 `
+    : "";
+  const comprehensionSection = withComprehension
+    ? `
+
+## 理解检验
+
+- 复述问题（检查核心机制）：
+- 迁移问题（换一个场景仍用同一机制）：
+
+<!-- 可选。默认不要强制出题。用户说不要理解检验时删除本段。 -->`
     : "";
 
   return `# ${topic}
@@ -58,15 +69,16 @@ ${formulaSection}### 1. 理解
 
 ### 2. 提炼
 
-- 关键概念：
-- 关系：
-- 约束：
+- 原文事实：
+- 必要推导：
+- 理解用类比（还不是事实）：
+- 尚未确认：
 
 ### 3. 意象映射
 
-| 知识概念 | 故事元素 | 对应理由 |
-| --- | --- | --- |
-|  |  |  |
+| 知识概念 | 类比元素 | 对应机制 | 适用边界 |
+| --- | --- | --- | --- |
+|  |  |  |  |
 
 ### 门禁自检
 
@@ -82,19 +94,20 @@ ${formulaSection}### 1. 理解
 ## 知识点校验
 
 - 用 1-3 句严谨复述核心机制：
-`;
+${comprehensionSection}`;
 }
 
 function help(): void {
-  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。\n`);
+  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。\n`);
 }
 
-function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string } {
+function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean } {
   let topic: string | undefined;
   let style: ExpressionStyle = "anime";
   let level: OutputLevel = "default";
   let withFormula = false;
   let intensity = "standard";
+  let withComprehension = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -132,13 +145,17 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
       withFormula = true;
       continue;
     }
+    if (arg === "--with-comprehension") {
+      withComprehension = true;
+      continue;
+    }
     usageError(`未知选项：${arg}`);
   }
   if (!topic) usageError("请通过 -t 或 --topic 提供主题");
-  return { topic, style, level, withFormula, intensity };
+  return { topic, style, level, withFormula, intensity, withComprehension };
 }
 
 if (import.meta.main) {
   const args = parseArgs(Bun.argv.slice(2));
-  process.stdout.write(`${renderTemplate(args.topic, args.style, args.level, args.withFormula, args.intensity)}\n`);
+  process.stdout.write(`${renderTemplate(args.topic, args.style, args.level, args.withFormula, args.intensity, args.withComprehension)}\n`);
 }
