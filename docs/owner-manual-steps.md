@@ -1,25 +1,24 @@
-# 需要仓库所有者手动完成的事项
+# 仓库所有者待办
 
-当前环境没有 GitHub 写入权限（`gh auth status` 显示未登录），因此下面这些不能在本机替你改掉。也不要让代理直接 push、发 Release 或改仓库名。
+已完成的项不要再做一遍。下面只保留仍需人工处理或仍未验证的内容。
 
-## GitHub 仓库设置
+## 已完成（2026-09-17）
 
-建议把公开元信息改成和 v2.1 一致，不要再写「四步流程 + 二次元故事风格」。
+- v2.1.0 已合进 `main`：https://github.com/songhangze985-eng/conversion-skill/pull/2
+- GitHub Description 已改为 `Mechanism Explainer — 可验证的复杂知识解释 Skill`
+- Homepage 已设为 `https://agentskills.io`
+- Topics 已设为 `agent-skills`、`eli5`、`explainer`、`plain-language`、`education`、`knowledge-explanation`、`analogies`
+- Issue #1 已回复，且保持打开：https://github.com/songhangze985-eng/conversion-skill/issues/1#issuecomment-5709597460
+- 合并后重新执行 `npx skills add songhangze985-eng/conversion-skill`，装到的 YAML `version` 是 `2.1.0`
 
-- **Description：** `Mechanism Explainer — 可验证的复杂知识解释 Skill`
-- **Homepage：** `https://github.com/songhangze985-eng/conversion-skill` 或 `https://agentskills.io`
-- **Topics：** `agent-skills`、`eli5`、`explainer`、`plain-language`、`education`、`knowledge-explanation`、`analogies`
+## 仍需人工或外部处理
 
-这些词都对应仓库真实功能，不要再堆 `ai`、`llm`、`chatgpt` 这类空标签。
+- [skills.sh 上的 conversion-skill 页](https://www.skills.sh/songhangze985-eng/conversion-skill/conversion-skill) 仍 404。仓库侧 `SKILL.md` 和 YAML `name` 已是 `conversion-skill`。只能等 skills.sh 爬虫刷新，或向 [vercel-labs/skills](https://github.com/vercel-labs/skills) 反馈。
+- 不要发 Release，除非你明确要打版本标签。
+- 不要改仓库名。
 
-## 发布与回复
+## 仍未验证、不要对外宣称完成
 
-- 审核后提交 `v2.1.0` 的 git commit；需要推送时再由所有者执行。
-- 审核 [`docs/issue-1-reply-draft.md`](issue-1-reply-draft.md) 再回复 Issue #1。不要由代理直接评论或关单。
-- [skills.sh 上的 conversion-skill 页](https://www.skills.sh/songhangze985-eng/conversion-skill/conversion-skill) 在 2026-09-17 仍 404。仓库侧 YAML 已是 `conversion-skill`。若页面不恢复，只能向 skills.sh / vercel-labs/skills 反馈，或等爬虫刷新。
-
-## 尚未执行、不要对外宣称完成的事
-
-- A/B/C 三组模型对照还没有原始输出。
-- 宿主里「下一句对话自动触发 Skill」未在真实 Cursor / Claude 会话中复核。
+- A/B/C 三组模型对照：本机没有独立模型 API，因此没有原始输出，也没有四维对照分。
+- 宿主里「下一句对话自动触发 Skill」：文件已装到 `~/.agents/skills/conversion-skill`，但还没有在新开的真实对话里复核触发。
 - GitHub Insights、安装次数、star 变化一律未知。

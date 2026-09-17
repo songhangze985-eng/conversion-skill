@@ -1,0 +1,25 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1.38"
+      - run: bun install --frozen-lockfile
+      - run: bun test scripts
+      - name: Mechanical fixture should pass
+        run: bun run check-output -- evals/fixtures/ok-three-col.md --style anime
+      - name: Missing mapping should fail
+        run: |
+          if bun run check-output -- evals/fixtures/fail-no-mapping.md --style neutral; then
+            echo "expected mechanical FAIL" >&2
+            exit 1
+          fi
