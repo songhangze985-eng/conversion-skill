@@ -1,0 +1,22 @@
+name: 使用反馈
+description: 难懂、失真、风格挡懂，或安装说明不清楚
+title: "[feedback] "
+labels: ["feedback"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: 你向技能提出的请求
+      description: 可以改写为可公开的最小版本。
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: 哪里失真、难懂，或风格压过了机制
+    validations:
+      required: true
+  - type: textarea
+    id: restatable
+    attributes:
+      label: 读者最终应能复述的机制

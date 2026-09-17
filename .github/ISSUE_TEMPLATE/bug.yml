@@ -1,0 +1,36 @@
+name: 缺陷
+description: 安装失败、讲错机制、或脚本接口回退
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 实际发生了什么
+      description: 请写完整句子。如果是讲错了，写出原文机制和技能给出的机制。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你认为正确的结果
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: 可公开的最小输入
+      description: 不要粘贴私人论文、凭据或受版权限制的全文。
+  - type: input
+    id: host
+    attributes:
+      label: 宿主 / 操作系统
+      placeholder: Cursor on Windows 11
+  - type: checkboxes
+    id: install
+    attributes:
+      label: 安装方式
+      options:
+        - label: npx skills add
+        - label: 手动拷贝
+        - label: 还没装上
