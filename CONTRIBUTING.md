@@ -26,7 +26,7 @@ bun run validate-input -- "你好啊"
 bun run check-output -- evals/fixtures/ok-three-col.md --style anime
 ```
 
-没有 Bun 时，至少用预览确认 `SKILL.md` 的 YAML 仍能被解析，且 `name` 未改。
+没有 Bun 时，至少用预览确认 `SKILL.md` 的 YAML 仍能被解析，且 `name` 未改。推到 GitHub 后，`.github/workflows/check.yml` 会再跑一遍脚本检查。
 
 ## 不要提交
 

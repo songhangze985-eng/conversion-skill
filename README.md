@@ -44,7 +44,7 @@ npx skills add songhangze985-eng/conversion-skill
 
 **普通模型对照**
 
-未执行。若要补做，使用同一输入、同一模型版本和 [`evals/protocol.md`](evals/protocol.md) 的 A/B/C 框架，把原始输出写入仓库外的记录，不要在这里编一段「基座模型会这样答」。
+未执行。2026-09-17 的本机环境里没有可用的独立模型 API，因此不能用正在维护本仓库的对话模型冒充 A 组或 C 组。若要补做，使用同一输入、同一模型版本和 [`evals/protocol.md`](evals/protocol.md)，把原始输出写入仓库外的记录。当前执行台账见 [`evals/STATUS.md`](evals/STATUS.md)。
 
 贝叶斯更新的侦探版样例也在 `references/domain-examples.md`，同样带有适用边界：没线索不等于宣告无罪，招供也不等于概率更新。
 
@@ -58,7 +58,7 @@ npx skills add songhangze985-eng/conversion-skill
 npx skills add songhangze985-eng/conversion-skill
 ```
 
-当时 CLI 检测到 Cursor，走了非交互安装，技能落到当前项目的 `.agents/skills/conversion-skill/`，并复制到本机已检测到的多个宿主。YAML `name` 与文件夹名都是 `conversion-skill`。
+合并 v2.1.0 之后又跑过一次：CLI 检测到 Cursor，走了非交互安装，技能落到 `.agents/skills/conversion-skill/`。YAML `name` 与文件夹名都是 `conversion-skill`，`metadata.version` 是 `2.1.0`。
 
 在普通交互终端里，同一行可能会先让你选宿主。若只想先确认仓库里有没有这个技能，可以运行：
 
