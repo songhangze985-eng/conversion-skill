@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 /**
- * Structural and evidence-ledger validation for converted Markdown.
+ * Mechanical validation for converted Markdown.
  *
- * A PASS means the document satisfies the declared mechanical evidence checks.
- * It never replaces the four-dimension human/LLM grading rubric.
+ * `verdict` remains the mechanical gate: structure plus optional fact-term/ID
+ * coverage. It is not a claim that the explanation is semantically correct or
+ * that a reader understood the mechanism. Semantic quality and comprehension
+ * are always reported as needing human or model review.
  */
 
 import { readFileSync } from "node:fs";
@@ -31,7 +33,8 @@ const VOICE_LEAKS = [
 
 const SOURCE_HEADERS = ["知识概念", "专业概念", "原始概念"];
 const STORY_HEADERS = ["故事元素", "表达元素", "类比元素"];
-const REASON_HEADERS = ["对应理由", "映射理由"];
+const REASON_HEADERS = ["对应理由", "映射理由", "对应机制"];
+const BOUNDARY_HEADERS = ["适用边界", "类比边界", "不成立之处"];
 
 export interface FactAnchor {
   page: number;
@@ -54,10 +57,16 @@ export interface FactLedger {
   facts: LedgerFact[];
 }
 
+export type GateVerdict = "PASS" | "FAIL";
+export type ReviewVerdict = "NEEDS_REVIEW";
+export type ComprehensionVerdict = "NOT_REQUESTED" | "STRUCTURE_PRESENT_NEEDS_REVIEW";
+
 interface MappingRow {
   source: string;
   story: string;
   reason: string;
+  mechanism?: string;
+  boundary?: string;
 }
 
 interface MappingCheck {
@@ -103,6 +112,13 @@ export interface OutputCheckResult {
   missing: string[];
   mapping_missing: string[];
   cover_ok: boolean;
+  has_mapping_bounds: boolean;
+  has_comprehension_section: boolean;
+  structure_verdict: GateVerdict;
+  term_id_coverage_verdict: GateVerdict;
+  semantic_quality_verdict: ReviewVerdict;
+  comprehension_verdict: ComprehensionVerdict;
+  verdict_scope: "mechanical_only";
   verdict: "PASS" | "FAIL";
 }
 
@@ -135,6 +151,7 @@ export function checkMappingTable(markdown: string): MappingCheck {
     const sourceIndex = findHeaderIndex(headers, SOURCE_HEADERS);
     const storyIndex = findHeaderIndex(headers, STORY_HEADERS);
     const reasonIndex = findHeaderIndex(headers, REASON_HEADERS);
+    const boundaryIndex = findHeaderIndex(headers, BOUNDARY_HEADERS);
     if (sourceIndex < 0 || storyIndex < 0 || reasonIndex < 0) continue;
 
     const divider = splitTableLine(lines[index + 1] ?? "");
@@ -151,10 +168,20 @@ export function checkMappingTable(markdown: string): MappingCheck {
       const source = cells[sourceIndex] ?? "";
       const story = cells[storyIndex] ?? "";
       const reason = cells[reasonIndex] ?? "";
+      const boundary = boundaryIndex >= 0 ? (cells[boundaryIndex] ?? "") : "";
       if (!source || !story || !reason) {
         return { ok: false, rows, error: "映射表存在空的知识概念、故事元素或对应理由单元格" };
       }
-      rows.push({ source, story, reason });
+      if (boundaryIndex >= 0 && !boundary) {
+        return { ok: false, rows, error: "映射表声明了适用边界列，但存在空单元格" };
+      }
+      rows.push({
+        source,
+        story,
+        reason,
+        mechanism: headers[reasonIndex]?.includes("机制") ? reason : undefined,
+        boundary: boundary || undefined,
+      });
     }
     if (rows.length === 0) return { ok: false, rows, error: "映射表没有任何非空数据行" };
     return { ok: true, rows };
@@ -182,6 +209,14 @@ export function storyBody(markdown: string): string {
 
 export function verificationText(markdown: string): string {
   return sectionAfterHeading(markdown, /^#{1,6}\s*.*知识点校验.*$/mu);
+}
+
+export function comprehensionText(markdown: string): string {
+  return sectionAfterHeading(markdown, /^#{1,6}\s*.*理解检验.*$/mu);
+}
+
+export function hasComprehensionSection(markdown: string): boolean {
+  return /^#{1,6}\s*.*理解检验.*$/mu.test(markdown);
 }
 
 function verificationOk(markdown: string): boolean {
@@ -320,7 +355,16 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const voice_leaks = VOICE_LEAKS.filter((phrase) => normalizedContains(`${storyBody(markdown)}\n${verificationText(markdown)}`, phrase));
   const ledger = loadFactLedger(options.factsPath, mapping, Boolean(options.requireFacts));
   const coverage = factCoverage(markdown, mapping, ledger);
-  const verdict = mapping.ok && verify && level_ok && style_ok && voice_leaks.length === 0 && coverage.ok ? "PASS" : "FAIL";
+  const leak_ok = voice_leaks.length === 0;
+  const has_mapping_bounds = mapping.ok && mapping.rows.length > 0 && mapping.rows.every((row) => Boolean(row.boundary));
+  const has_comprehension_section = hasComprehensionSection(markdown);
+  const structure_verdict: GateVerdict = mapping.ok && verify && level_ok && style_ok && leak_ok ? "PASS" : "FAIL";
+  const term_id_coverage_verdict: GateVerdict = coverage.ok ? "PASS" : "FAIL";
+  const semantic_quality_verdict: ReviewVerdict = "NEEDS_REVIEW";
+  const comprehension_verdict: ComprehensionVerdict = has_comprehension_section
+    ? "STRUCTURE_PRESENT_NEEDS_REVIEW"
+    : "NOT_REQUESTED";
+  const verdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
 
   return {
     has_mapping_table: mapping.ok,
@@ -335,7 +379,7 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
     style_ok,
     expected_style: options.expectedStyle,
     voice_leaks,
-    leak_ok: voice_leaks.length === 0,
+    leak_ok,
     facts_provided: ledger.provided,
     facts_path: ledger.path,
     fact_ledger_valid: ledger.valid,
@@ -344,29 +388,48 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
     missing: coverage.missing,
     mapping_missing: coverage.mappingMissing,
     cover_ok: coverage.ok,
+    has_mapping_bounds,
+    has_comprehension_section,
+    structure_verdict,
+    term_id_coverage_verdict,
+    semantic_quality_verdict,
+    comprehension_verdict,
+    verdict_scope: "mechanical_only",
     verdict,
   };
+}
+
+function reviewLabel(verdict: ReviewVerdict | ComprehensionVerdict): string {
+  if (verdict === "NOT_REQUESTED") return "未请求（不能据此判断用户已理解）";
+  if (verdict === "STRUCTURE_PRESENT_NEEDS_REVIEW") return "已见题目结构，需要人工或模型复核";
+  return "需要人工或模型复核";
 }
 
 function render(result: OutputCheckResult): string {
   const lines = [
     "转换结果校验",
-    `  映射表: ${result.has_mapping_table ? "OK" : `FAIL${result.mapping_error ? ` (${result.mapping_error})` : ""}`}`,
-    `  知识点校验: ${result.has_verify ? "OK" : "MISSING"}`,
-    `  篇幅: ${result.level_msg} (${result.level_ok ? "OK" : "FAIL"})`,
-    `  风格元数据: ${result.style_ok ? `OK (${result.style})` : `FAIL (${result.style ?? "缺失"})`}`,
-    `  情况句泄漏: ${result.leak_ok ? "OK" : `LEAK ${JSON.stringify(result.voice_leaks)}`}`,
-    `  事实清单: ${result.fact_ledger_valid ? "OK" : `FAIL ${result.fact_ledger_errors.join("；")}`}`,
-    `  事实覆盖: ${result.covered.length}/${result.covered.length + result.missing.length} (${result.cover_ok ? "OK" : "FAIL"})`,
+    `  结构检查: ${result.structure_verdict}`,
+    `    映射表: ${result.has_mapping_table ? "OK" : `FAIL${result.mapping_error ? ` (${result.mapping_error})` : ""}`}`,
+    `    知识点校验: ${result.has_verify ? "OK" : "MISSING"}`,
+    `    篇幅: ${result.level_msg} (${result.level_ok ? "OK" : "FAIL"})`,
+    `    风格元数据: ${result.style_ok ? `OK (${result.style})` : `FAIL (${result.style ?? "缺失"})`}`,
+    `    情况句泄漏: ${result.leak_ok ? "OK" : `LEAK ${JSON.stringify(result.voice_leaks)}`}`,
+    `    适用边界列: ${result.has_mapping_bounds ? "PRESENT" : "OPTIONAL_ABSENT"}`,
+    `  事实术语及 ID 覆盖: ${result.term_id_coverage_verdict}`,
+    `    事实清单: ${result.fact_ledger_valid ? "OK" : `FAIL ${result.fact_ledger_errors.join("；")}`}`,
+    `    覆盖: ${result.covered.length}/${result.covered.length + result.missing.length} (${result.cover_ok ? "OK" : "FAIL"})`,
+    `  语义质量评估: ${reviewLabel(result.semantic_quality_verdict)}`,
+    `  用户理解验证: ${reviewLabel(result.comprehension_verdict)}`,
   ];
   if (result.missing.length > 0) lines.push(`  正文/校验未覆盖: ${result.missing.join("；")}`);
   if (result.mapping_missing.length > 0) lines.push(`  映射表未覆盖: ${result.mapping_missing.join("；")}`);
-  lines.push(`结论: ${result.verdict}`);
+  lines.push(`结论(仅机械门禁): ${result.verdict}`);
+  lines.push("说明: 结构或术语覆盖通过，不表示知识准确，也不表示用户已经理解。");
   return lines.join("\n");
 }
 
 function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n\nPDF 事实清单中的每个 ID 都必须出现在映射表和知识点校验中。\n`);
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
 }
 
 function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean } {

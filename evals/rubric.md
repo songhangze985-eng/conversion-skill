@@ -1,6 +1,10 @@
-# 严格 8/8 评分量表
+# 评分量表
 
-用于评估转换稿质量。四维各 0–2 分；本地论文验收只有**四维全为 2、总分严格 8/8** 才算 PASS。6/8、7/8 或结构门禁失败都必须报告失败项，不能用总分平均掩盖。
+四维各 0–2 分，标准不因项目想拿高分而放宽。
+
+普通对照评测：总分 ≥6，且「能懂」「保真」都 ≥1，才算过线。本地论文验收只有**四维全为 2、总分严格 8/8** 才算 PASS。6/8、7/8 或结构门禁失败都必须报告失败项，不能用总分平均掩盖。
+
+结构检查、术语出现和事实 ID 覆盖是另一件事。它们不能提高本量表的分数，也不能代替本量表。
 
 ## 1. 能懂
 
@@ -33,7 +37,7 @@
 - 正文后有含「知识点校验」的 Markdown 标题与非空校验内容。
 - `default` 档正文不超过 800 汉字；`expand` 与 `long` 按本技能篇幅规则处理。
 - `author-voice.md` 的固定情况句不出现在正文或知识点校验中。
-- 本地检查运行 `bun run check-output -- <result.md> --level <level> --style <style> [--facts <absolute-temp/fact-ledger.verified.json>]` 并返回 PASS。
+- 本地检查运行 `bun run check-output -- <result.md> --level <level> --style <style> [--facts <absolute-temp/fact-ledger.verified.json>]`。这里的 PASS 只覆盖结构检查与事实术语/ID 覆盖；语义质量和用户理解必须按上面四维另行复核。
 
 ## 论文严格验收附加条件
 

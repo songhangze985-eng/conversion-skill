@@ -1,173 +1,157 @@
 # conversion-skill
 
-[![GitHub stars](https://img.shields.io/github/stars/songhangze985-eng/conversion-skill?style=flat)](https://github.com/songhangze985-eng/conversion-skill/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
-[![Optional runtime: Bun](https://img.shields.io/badge/optional%20runtime-Bun%20%3E%3D%201.1.0-fbf0df?logo=bun)](https://bun.sh/)
+**可验证的复杂知识解释 Skill。** 让复杂知识变得易懂，同时让每个比喻都有据可查。
 
-> **中文**：把难懂的论文、公式与系统机制，讲到外行也能准确复述。
->
-> **English**: An [Agent Skill](https://agentskills.io) for turning dense technical knowledge into plain-language explanations without changing how the underlying mechanism works.
+English: Mechanism Explainer — explain complex knowledge with traceable analogies and factual verification. It is an [Agent Skill](https://agentskills.io) for Claude Code, Cursor, Codex, Copilot, Gemini CLI, and other hosts that read `SKILL.md`.
 
-`conversion-skill` 不只是把术语换成口语。它先提取事实、关系与约束，再选择一个与原机制同构的叙事场景，最后用非故事化的知识点校验收尾。好懂不能靠删掉关键限制，好看也不能靠编造因果。
+读了好几遍还不懂的公式、协议、论文或系统机制，可以变成普通人听完能复述的短解释。解释必须留下概念映射和知识点校验；比喻只能帮助理解，不能偷偷改掉机制。二次元、侦探推理、项目战情室和自然纪录片都还在，但它们是可选表达，不是这个项目要推销的身份。
 
-## 中文概览
+核心能力只靠一份 Markdown Skill。普通使用不需要 Bun、TypeScript 或 Python。
 
-- **先保真，后表达**：先建立事实清单，再决定比喻、故事或风格。
-- **机制要对得上**：故事里的角色、规则和流程都要能映射回原概念。
-- **默认短而完整**：正文默认不超过 800 字，结尾用 1–3 句严谨校验收束。
-- **风格服务理解**：任何皮肤会导致失真时，立即降为中性说明。
+```bash
+npx skills add songhangze985-eng/conversion-skill
+```
 
-适合“这篇论文看不懂”“这个公式太抽象”“请讲人话但别讲错”这类请求；不适合逐页逐句翻译、纯原创小说或只导出 PDF 原始文字。
+装好后直接说「帮我理解快速排序的运行原理」即可。目录名和 YAML `name` 都是 `conversion-skill`，不要改成 `conversion`。
 
-## 适用范围 / What it is for
+## 它实际长什么样
 
-Use it when a reader says a formula, protocol, paper, mechanism, or operating procedure is too abstract and asks for an analogy, a story, or a plain-language explanation. Natural-language requests are enough; this release does not promise the legacy `/conversion` shortcut.
+下面这一组材料可以在仓库里核对。Skill 回答来自 [`references/domain-examples.md`](references/domain-examples.md) 的达标样例，不是某次线上模型的原始日志。普通模型对照尚未执行，因此这里不伪造「无 Skill」回答，也不宣称理解能力提高了多少。
 
-The core skill is portable Agent Skills Markdown. Optional local helpers require Bun and are useful for repeatable structure checks and PDF evaluation.
+**输入**
 
-## 表达风格 / Expression styles
+选一个 pivot，小的放左、大的放右，递归处理两边。
 
-Anime remains the default. A user can request one of the following alternatives without changing the factual workflow.
+**Skill 样例（已核对）**
 
-| Style id | Chinese request | Best for | Boundary |
+运动会预选。皮沃特老师随手点一个人当达标线。「达标左边，没达标右边。定线的人这轮不比了，名次卡在两拨中间。」小快问：「一直分？」老师：「一组只剩一个人就不比。选哪条线都行，选偏了只是慢，名次仍对。」
+
+外行应能复述：先定一条线把人分成两拨，定线的人位置先钉死，两拨再各自重复，直到没法再分。
+
+**概念映射**
+
+| 知识概念 | 类比元素 | 对应机制 | 适用边界 |
 |---|---|---|---|
-| `anime` | 二次元 / 轻度 / 中二 | General concepts and vivid scenes | Existing light, standard, and heavy intensity levels remain anime-only. |
-| `detective` | 侦探推理 / 破案式 | Evidence, causes, hypotheses, probability updates | Do not invent guilt, motives, or evidence that is absent from the source. |
-| `war-room` | 项目战情室 / 指挥室 | Coordination, protocols, workflows, changing relationships | Roles and alerts must represent real constraints, not replace them. |
-| `nature-documentary` | 自然纪录片 / 观察镜头 | Time-space change, observation, and system dynamics | Keep causal rules explicit; atmosphere cannot become a substitute for explanation. |
+| pivot | 本轮达标线 | 用来分组的基准 | 选哪条线只影响快慢，不决定名次对错 |
+| 分区 | 达标站左、不达标站右 | 按与基准的比较结果分组 | 不是按身高、学号或其他无关属性排队 |
+| 递归 | 两组再各自选新达标线 | 对子组重复同一规则 | 不是两组之间再比一次总分 |
+| 终止 | 一组只剩一人就不比 | 规模 ≤1 时停止 | 不是永远分下去 |
+| pivot 不再比 | 定线的人本轮名次锁定 | 分区后位置已定 | 定线的人不是本轮冠军 |
 
-All styles obey the same rule: when a scene cannot preserve the mechanism, lower the style intensity or use a neutral explanation instead of forcing a metaphor.
+**知识点校验**
 
-## 工作原理 / How the skill works
+快排每轮选 pivot 分区，pivot 位置确定后不再递归，对左右子组重复，子组规模 ≤1 时停止。pivot 影响效率不影响正确性。
 
-1. **Understand** — Restate the source and make assumptions visible.
-2. **Extract facts** — List concepts, relationships, and constraints without adding or dropping any.
-3. **Map mechanisms** — Give each key concept one story element and explain why the actions are isomorphic.
-4. **Express** — Write one short, readable body in the selected style. The default body is at most 800 Chinese characters.
-5. **Check** — Run the lay-reader gate, then add a 1–3 sentence factual verification in a non-story voice.
+**普通模型对照**
 
-The analysis and mapping table stay folded in `<details>` so the reader sees one explanation first.
+未执行。若要补做，使用同一输入、同一模型版本和 [`evals/protocol.md`](evals/protocol.md) 的 A/B/C 框架，把原始输出写入仓库外的记录，不要在这里编一段「基座模型会这样答」。
 
-## 论文模式 / Academic-PDF navigation
+贝叶斯更新的侦探版样例也在 `references/domain-examples.md`，同样带有适用边界：没线索不等于宣告无罪，招供也不等于概率更新。
 
-For a readable research PDF, the skill does not try to paraphrase every page. It identifies the paper's central contribution from the title, abstract, method, and conclusion; records a temporary fact ledger with page anchors; and explains that contribution by default.
+## 安装
 
-If the PDF contains several unrelated contributions, state the selected focus before writing. If the host cannot read the file reliably, ask for an abstract or selected pages instead of inventing missing facts. A large paper is therefore a navigation task, not an automatic refusal.
+### 已验证的一键安装
 
-## 快速开始 / Quick start
+在 2026-09-17 的 Windows + Cursor CLI 环境中，[skills CLI](https://github.com/vercel-labs/skills) 能够识别本仓库、发现根目录 `SKILL.md`，并完成安装。下面这行就是实际跑通的命令：
 
-Install the repository as a skill directory named `conversion-skill` so the directory and the YAML `name` match:
+```bash
+npx skills add songhangze985-eng/conversion-skill
+```
+
+当时 CLI 检测到 Cursor，走了非交互安装，技能落到当前项目的 `.agents/skills/conversion-skill/`，并复制到本机已检测到的多个宿主。YAML `name` 与文件夹名都是 `conversion-skill`。
+
+在普通交互终端里，同一行可能会先让你选宿主。若只想先确认仓库里有没有这个技能，可以运行：
+
+```bash
+npx skills add songhangze985-eng/conversion-skill -l
+```
+
+它应当列出 `conversion-skill`。
+
+[skills.sh](https://www.skills.sh/songhangze985-eng/conversion-skill/conversion-skill) 在 2026-09-17 仍返回「isn't available in this repository」。这是目录站点的外部状态，不是本仓库缺少 `SKILL.md`。在该页恢复之前，不要把 skills.sh 写成已经可装。
+
+安装成功只证明文件就位。宿主会不会在下一句对话里自动触发 Skill，取决于具体产品，当前标记为未验证。
+
+### Windows
+
+PowerShell：
+
+```powershell
+npx skills add songhangze985-eng/conversion-skill
+```
+
+若只能手动拷贝：
 
 ```powershell
 git clone https://github.com/songhangze985-eng/conversion-skill.git
-Copy-Item -Recurse conversion-skill "$env:USERPROFILE\\.codex\\skills\\conversion-skill"
+Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.agents\skills\conversion-skill"
 ```
 
-For another Agent Skills host, copy the repository root into that host's skills directory with the same `conversion-skill` folder name. The important requirements are a visible `SKILL.md` and matching folder/metadata names.
+Cursor 用户也可以拷到 `"$env:USERPROFILE\.cursor\skills\conversion-skill"`，Codex 则是 `"$env:USERPROFILE\.codex\skills\conversion-skill"`。文件夹名必须是 `conversion-skill`。
 
-安装后，直接用自然语言提出请求；不需要旧版 `/conversion` 指令：
+### macOS / Linux
 
-```text
-请用项目战情室的方式讲清楚这篇论文的核心贡献；保留关键约束，最后给知识点校验。
-
-这个协议我看不懂。请用侦探推理式表达，告诉我每一步在验证什么，不要编造证据。
-
-请把这个时空模型讲成自然纪录片；如果比喻会失真，就改用中性说明。
+```bash
+npx skills add songhangze985-eng/conversion-skill
 ```
 
-## 示例与输出 / Examples and output
+手动安装：
 
-无论选择什么表达方式，产物都遵循同一条清晰链路：
-
-```text
-理解请求 → 提炼事实与约束 → 概念—意象映射 → 风格化正文 → 知识点校验
+```bash
+git clone https://github.com/songhangze985-eng/conversion-skill.git
+mkdir -p ~/.agents/skills
+cp -R conversion-skill ~/.agents/skills/conversion-skill
 ```
 
-读者默认先看到完整正文；分析过程和映射表收在 `<details>` 中，方便需要时核对而不打断阅读。风格只能改变叙事手段，不能改变事实、约束或校验段。
+其他宿主把同一目录放到各自的 skills 根目录即可，例如 `~/.claude/skills/conversion-skill` 或 `~/.cursor/skills/conversion-skill`。
 
-## 可选本地工具 / Optional local tools
+### 无终端时
 
-The helper scripts are intentionally optional. They use Bun and TypeScript; PDF evaluation additionally installs `pdfjs-dist@5.6.205`.
+下载 [SKILL.md](https://raw.githubusercontent.com/songhangze985-eng/conversion-skill/main/SKILL.md)，在支持上传 Skill 的产品设置里导入。可选脚本不会一起生效，但不影响普通解释。
 
-```powershell
+### 安装验收
+
+1. 目标目录存在 `SKILL.md`。
+2. 该文件的 YAML `name` 是 `conversion-skill`。
+3. 文件夹名也是 `conversion-skill`，不要改成 `conversion`。
+4. 对宿主说：「帮我理解快速排序的运行原理。」若技能被触发，输出应有映射和知识点校验；若没有触发，先检查目录名，再显式提到 conversion-skill。自动触发本身需要在你的宿主里复核。
+
+### 可选工具依赖
+
+日常使用只需要宿主能读 `SKILL.md`。`scripts/` 里的 Bun/TypeScript 工具用来做输入分流、骨架生成、结构检查和本地 PDF 评测，**不是**普通解释的前提。要用这些工具时再安装 [Bun](https://bun.sh/) 1.1 或更高版本，并在仓库根目录运行 `bun install`。没有 Bun 也能把知识讲懂。
+
+## 怎么用
+
+技能靠 `SKILL.md` 的 description 匹配自然语言。用户不必先打技能名。下面三句都应该走进同一套工作流：理解、提炼事实、做可对照的类比、写出短解释、再用非故事腔校验。
+
+「帮我理解快速排序的运行原理。」
+
+「用通俗的语言解释这篇论文的核心贡献，保留重要限制。」
+
+「用侦探推理的方式讲解贝叶斯定理，并指出比喻在哪些地方不成立。」
+
+用户说看不懂、太抽象、讲人话、用比喻讲清楚、老妪能解，或要一篇论文的核心贡献时，也应触发。只要一句话、不要映射，或者是在写小说、翻译、会议纪要、代码审查、导出 PDF 原文，则不应触发。
+
+默认正文不超过 800 字，默认表达仍是二次元。可以说「用轻度」「用项目战情室」「用自然纪录片」或「不要故事，直接讲」。当比喻保不住机制时，技能应改口中性说明。若还想检查自己有没有懂，可以要求一道复述题和一道迁移题；普通使用默认不出题。
+
+## 它保证什么，不保证什么
+
+它保证解释可以核对：事实清单、映射、适用边界和知识点校验是给读者和评测者看的，不是装饰。论文输入会先建带页码锚点的临时事实清单；读不清就停，不编来源。
+
+它不保证「理解能力提升百分之多少」，也不保证每次都比未安装的模型更好。那些结论只能来自 [`evals/`](evals/) 里的对照实验。现有 `check-output` 通过，只说明结构或术语覆盖齐了，不能说明知识正确，更不能说明用户已经掌握。
+
+## 可选本地命令
+
+```bash
 bun install
-
-# Input routing and an empty five-step shell
-bun run validate-input "贝叶斯定理 P(A|B)=P(B|A)P(A)/P(B)"
-bun run generate-template --topic "快速排序" --style detective
-
-# Check a completed conversion against its structure and temporary fact ledger
-bun run check-output --file result.md --style detective --facts facts.json
-
-# Prepare or grade a PDF only in an explicit temporary workspace
-bun run evaluate-pdf --help
+bun test scripts
+bun run validate-input -- "贝叶斯定理 P(A|B)=P(B|A)P(A)/P(B)"
+bun run generate-template -- -t "快速排序" -s detective --with-comprehension
+bun run check-output -- evals/fixtures/ok-four-col.md --style detective
 ```
 
-`evaluate-pdf` is a local evaluator, not the skill's prose generator. It extracts text with PDF.js, can render selected pages with Poppler, and checks that the supplied result and fact ledger stay in an isolated workspace. It never runs Git commands.
+`evaluate-pdf` 只在仓库外的空临时目录工作，不调用 Git，也不生成故事正文。评测怎么跑，见 [`evals/README.md`](evals/README.md)。
 
-## 本地论文评测与隐私 / Local paper evaluation and privacy
-
-For an acceptance run, export the skill to a temporary copy that excludes `.git`. Read source PDFs in place, keep extracted text, rendered pages, fact ledgers, conversion drafts, and grade cards only in that temporary directory, then remove it after reporting the verdict. Do not add PDFs, answers, screenshots, or paper-specific facts to this repository.
-
-The score is four dimensions, two points each:
-
-| Dimension | Full-score requirement |
-|---|---|
-| 能懂 | An outsider can restate the mechanism in one plain sentence. |
-| 保真 | The factual check and story preserve the source mechanism and constraints. |
-| 同构 | Every ledger fact has an explicit, non-colliding mapping. |
-| 表达不挡懂 | The chosen expression is memorable without adding jargon or unsupported drama. |
-
-Only an 8/8 result, complete fact coverage, a passing structural check, and a clean temporary-workspace check count as acceptance. Preparation, rendering, and structural validation are timed separately from model prose generation.
-
-### 质量标准 / Quality bar
-
-| 维度 | 满分要求 |
-|---|---|
-| 能懂 | 外行能用一句大白话复述机制。 |
-| 保真 | 没有无依据补充、遗漏关键约束或机制反转。 |
-| 同构 | 每个关键事实都有明确、不冲突的映射。 |
-| 表达不挡懂 | 风格增强记忆，不增加黑话或戏剧化噪音。 |
-
-严格 PDF 验收不会因为“有表格”或“有校验段”就判定通过：事实清单中的每个 ID 都必须同时出现在映射表与知识点校验中。`evaluate-pdf` 只在仓库外、无 `.git` 的空临时目录写入测试产物，验收完成后应删除这些材料。
-
-## 项目结构 / Repository layout
-
-```text
-conversion-skill/
-├── SKILL.md                    # Triggering and five-step workflow
-├── references/                 # Mapping, gate, paper navigation, and styles
-├── assets/templates/           # Folded-analysis output shells
-├── scripts/                    # Optional Bun/TypeScript local helpers
-└── evals/                      # Generic rubric and trigger examples only
-```
-
-The repository deliberately contains no research-paper fixture, generated paper explanation, or scoring report.
-
-## 贡献与反馈 / Contributing and support
-
-欢迎通过 [Issues](https://github.com/songhangze985-eng/conversion-skill/issues) 反馈问题或提出改进建议。高价值反馈请包含：
-
-1. 可公开的最小输入片段或概念描述；
-2. 读者最终应能复述的机制；
-3. 哪一处失真、难懂，或风格压过了机制。
-
-提交前请不要加入私密论文、凭据、生成答案或临时评测产物。工具改动可先运行 `bun install --frozen-lockfile` 及对应的本地检查。
-
-## 常见问题 / FAQ
-
-**Does a special style change the facts?**
-No. Style only changes how the mechanism is staged. Facts, constraints, and the verification paragraph remain source-grounded.
-
-**What if anime is not appropriate?**
-Request `侦探推理`、`项目战情室`、`自然纪录片`, or ask for a neutral explanation. The default never overrides reader preference.
-
-**Why is the paper not explained page by page?**
-The skill focuses on the paper's central contribution so a reader can understand and repeat it. It makes the chosen focus explicit and retains page anchors in temporary analysis.
-
-**Does local evaluation upload anything?**
-No. The evaluator works from a copy with no `.git` directory and never invokes `git add`, `commit`, `push`, or remote operations.
-
-## License / 开源许可
+## 许可
 
 [MIT](LICENSE)
