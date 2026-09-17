@@ -1,8 +1,8 @@
 {
   "name": "conversion-skill",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "Local Bun/TypeScript validation and isolated PDF-evaluation helpers for conversion-skill.",
+  "description": "Optional Bun/TypeScript helpers for conversion-skill. The Markdown skill itself does not require Bun.",
   "type": "module",
   "engines": {
     "bun": ">=1.1.0"
@@ -11,7 +11,8 @@
     "validate-input": "bun scripts/validate-input.ts",
     "generate-template": "bun scripts/generate-template.ts",
     "check-output": "bun scripts/check-output.ts",
-    "evaluate-pdf": "bun scripts/evaluate-pdf.ts"
+    "evaluate-pdf": "bun scripts/evaluate-pdf.ts",
+    "test": "bun test scripts"
   },
   "dependencies": {
     "pdfjs-dist": "5.6.205"
