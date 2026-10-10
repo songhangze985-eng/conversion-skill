@@ -32,7 +32,7 @@
 
 ## 结构门禁（任一失败即不通过）
 
-- 标题下有 `> 表达风格：\`<anime|detective|war-room|nature-documentary|neutral>\`` 与 `> 篇幅：\`<default|expand|long>\``。
+- 标题下有 `> 表达风格：\`<anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\`` 与 `> 篇幅：\`<default|expand|long>\``。
 - 映射表含「知识概念｜故事元素｜对应理由」三列、分隔行和至少一条非空映射。
 - 正文后有含「知识点校验」的 Markdown 标题与非空校验内容。
 - `default` 档正文不超过 800 汉字；`expand` 与 `long` 按本技能篇幅规则处理。

@@ -44,7 +44,7 @@ npx skills add songhangze985-eng/conversion-skill
 
 **普通模型对照**
 
-未执行。2026-09-17 的本机环境里没有可用的独立模型 API，因此不能用正在维护本仓库的对话模型冒充 A 组或 C 组。若要补做，使用同一输入、同一模型版本和 [`evals/protocol.md`](evals/protocol.md)，把原始输出写入仓库外的记录。当前执行台账见 [`evals/STATUS.md`](evals/STATUS.md)。
+未执行。若要补做，使用同一输入、同一模型版本和 [`evals/protocol.md`](evals/protocol.md) 的 A/B/C 框架，把原始输出写入仓库外的记录，不要在这里编一段「基座模型会这样答」。
 
 贝叶斯更新的侦探版样例也在 `references/domain-examples.md`，同样带有适用边界：没线索不等于宣告无罪，招供也不等于概率更新。
 
@@ -58,7 +58,7 @@ npx skills add songhangze985-eng/conversion-skill
 npx skills add songhangze985-eng/conversion-skill
 ```
 
-合并 v2.1.0 之后又跑过一次：CLI 检测到 Cursor，走了非交互安装，技能落到 `.agents/skills/conversion-skill/`。YAML `name` 与文件夹名都是 `conversion-skill`，`metadata.version` 是 `2.1.0`。
+当时 CLI 检测到 Cursor，走了非交互安装，技能落到当前项目的 `.agents/skills/conversion-skill/`，并复制到本机已检测到的多个宿主。YAML `name` 与文件夹名都是 `conversion-skill`。
 
 在普通交互终端里，同一行可能会先让你选宿主。若只想先确认仓库里有没有这个技能，可以运行：
 
@@ -132,7 +132,7 @@ cp -R conversion-skill ~/.agents/skills/conversion-skill
 
 用户说看不懂、太抽象、讲人话、用比喻讲清楚、老妪能解，或要一篇论文的核心贡献时，也应触发。只要一句话、不要映射，或者是在写小说、翻译、会议纪要、代码审查、导出 PDF 原文，则不应触发。
 
-默认正文不超过 800 字，默认表达仍是二次元。可以说「用轻度」「用项目战情室」「用自然纪录片」或「不要故事，直接讲」。当比喻保不住机制时，技能应改口中性说明。若还想检查自己有没有懂，可以要求一道复述题和一道迁移题；普通使用默认不出题。
+默认正文不超过 800 字，默认表达仍是二次元。可以说「用轻度」「用项目战情室」「用自然纪录片」「用诗篇」「用记叙文」「用播客对谈」或「不要故事，直接讲」。当比喻保不住机制时，技能应改口中性说明。若还想检查自己有没有懂，可以要求一道复述题和一道迁移题；普通使用默认不出题。
 
 ## 它保证什么，不保证什么
 

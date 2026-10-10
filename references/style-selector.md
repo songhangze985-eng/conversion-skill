@@ -4,7 +4,7 @@
 
 ## 选择顺序
 
-1. 用户明确点名风格时，使用该风格：`anime`、`detective`、`war-room` 或 `nature-documentary`。
+1. 用户明确点名风格时，使用该风格：`anime`、`detective`、`war-room`、`nature-documentary`、`verse`（诗篇）、`narrative`（记叙文）或 `podcast`（播客对谈）。
 2. 用户说「正式一点」「别讲故事」「只想清楚说明」时，使用 `neutral`；它保留映射表和门禁，但正文采用直接、日常的解释。
 3. 用户未指定时，默认 `anime` 的标准浓度。
 4. 选中的风格若无法让每一步机制逐一对照，或会使必要术语更难懂，立即改为 `neutral`。说明这次降档的原因，不混搭多个皮肤补救。
@@ -17,6 +17,9 @@
 | `detective` | 证据、因果、比较、判断更新 | `style-detective.md` | 把结论写成无证据的「破案」 |
 | `war-room` | 协作、流程、约束、动态系统 | `style-war-room.md` | 把分布式互动误写成单人命令 |
 | `nature-documentary` | 时空变化、观察、层级、系统演化 | `style-nature-documentary.md` | 把隐喻生物化后当作事实 |
+| `verse` | 重复步骤、回环、可用同一句拦住的约束 | 先读 `style-verse.md`，再读 `verse-workflow.md` | 用典故、生僻词或韵脚漏掉步骤 |
+| `narrative` | 有先后的过程、状态变化、中途被拦住 | 先读 `style-narrative.md`，再读 `narrative-workflow.md` | 事情顺序那句漏掉暗示的原因或对话里的判断 |
+| `podcast` | 可追问的步骤、约束和看走眼的后果 | 先读 `style-podcast.md`，再读 `podcast-workflow.md` | 一次问两步，或寒暄超过一句开场 |
 | `neutral` | 风格会妨碍理解，或用户明确不要叙事 | 不必读额外风格文件 | 跳过映射表、事实或门禁 |
 
 ## 输出标识

@@ -7,6 +7,9 @@ export const EXPRESSION_STYLES = [
   "detective",
   "war-room",
   "nature-documentary",
+  "verse",
+  "narrative",
+  "podcast",
   "neutral",
 ] as const;
 

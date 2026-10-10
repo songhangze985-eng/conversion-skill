@@ -16,6 +16,13 @@ describe("generate-template", () => {
     expect(markdown).toContain("### 公式含义");
   });
 
+  test("verse, narrative, and podcast are selectable styles", () => {
+    for (const style of ["verse", "narrative", "podcast"] as const) {
+      const markdown = renderTemplate("上下文压缩", style, "default", false);
+      expect(markdown).toContain(`> 表达风格：\`${style}\``);
+    }
+  });
+
   test("comprehension section is opt-in", () => {
     const markdown = renderTemplate("CAP", "war-room", "default", false, "standard", true);
     expect(markdown).toContain("## 理解检验");

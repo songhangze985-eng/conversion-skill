@@ -8,6 +8,9 @@ const STYLE_DESCRIPTIONS: Record<ExpressionStyle, string> = {
   detective: "侦探推理：用线索、证据与判断更新承载因果，不能伪造证据。",
   "war-room": "项目战情室：用角色分工、信息流和约束承载协作，不能把比喻写成结论。",
   "nature-documentary": "自然纪录片：用观察、环境变化和系统演化承载时空机制，不能拟人化到改变关系。",
+  verse: "诗篇：用短句和反复出现的规则承载步骤，不能用典故或韵脚漏掉机制。",
+  narrative: "记叙文：按时间写下输入、动作、约束和结果，不能编造原文没有的转折。",
+  podcast: "播客对谈：用一问一答推进步骤，不能用寒暄代替机制。",
   neutral: "中性说明：直接讲机制；当任何皮肤会破坏同构时自动回退到此模式。",
 };
 
@@ -98,7 +101,7 @@ ${comprehensionSection}`;
 }
 
 function help(): void {
-  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。\n`);
+  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。\n`);
 }
 
 function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean } {

@@ -1,6 +1,6 @@
 # 情况回复（非正文风格）
 
-技能对使用者的状态回复可使用这里的固定句。它不属于 `anime`、`detective`、`war-room` 或 `nature-documentary` 中的任何一种表达，只用于卡住、交不出稿、逐页全量改写或催更。
+技能对使用者的状态回复可使用这里的固定句。它不属于 `anime`、`detective`、`war-room`、`nature-documentary`、`verse`、`narrative` 或 `podcast` 中的任何一种表达，只用于卡住、交不出稿、逐页全量改写或催更。
 
 **禁止**写进第 4 步知识正文，**禁止**写进知识点校验。通用可懂门禁管知识；这里仅管作者跟编辑说话。
 

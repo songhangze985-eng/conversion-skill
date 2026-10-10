@@ -1,11 +1,11 @@
 ---
 name: conversion-skill
-description: "把复杂知识讲到普通人能复述，并留下可核对的概念映射、事实依据和类比边界。默认二次元表达，也可使用侦探推理、项目战情室、自然纪录片或中性说明。论文先建带页码锚点的事实清单再解释核心贡献。Use when the user says 看不懂, 太抽象, 讲人话, 用比喻/故事讲清楚, 老妪能解, or asks for a mechanism-preserving explanation of a formula, protocol, system, or academic paper — even if they never say conversion-skill. NOT FOR raw PDF extraction, one-line ELI5 without a mapping, original fiction, translation, meeting notes, or code review."
+description: "把复杂知识讲到普通人能复述，并留下可核对的概念映射、事实依据和类比边界。默认二次元表达，也可使用侦探推理、项目战情室、自然纪录片、诗篇、记叙文、播客对谈或中性说明。论文先建带页码锚点的事实清单再解释核心贡献。Use when the user says 看不懂, 太抽象, 讲人话, 用比喻/故事讲清楚, 老妪能解, or asks for a mechanism-preserving explanation of a formula, protocol, system, or academic paper — even if they never say conversion-skill. NOT FOR raw PDF extraction, one-line ELI5 without a mapping, original fiction, translation, meeting notes, or code review."
 license: MIT
 compatibility: "The Markdown skill is host-agnostic and has no runtime dependency. Optional local validation and paper navigation require Bun >=1.1; PDF extraction additionally uses the bundled pdfjs-dist dependency."
 metadata:
   author: songhangze985-eng
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # conversion-skill
@@ -37,6 +37,7 @@ metadata:
 | 第 4 步选择表达方式 | `references/style-selector.md`，再只读选中风格的文件 |
 | 默认二次元 | `references/style-anime.md`；角色不够用再读 `assets/templates/character-archetypes.md` |
 | 侦探推理 / 项目战情室 / 自然纪录片 | 分别读 `references/style-detective.md`、`references/style-war-room.md`、`references/style-nature-documentary.md` |
+| 诗篇 / 记叙文 / 播客对谈 | 分别读对应的 `style-*.md`，再读 `verse-workflow.md`、`narrative-workflow.md` 或 `podcast-workflow.md` |
 | 可读取的学术论文或 PDF | `references/paper-navigation.md` |
 | 写完正文、过通用门禁前 | `references/lao-yu-gate.md` |
 | 用户要求检查自己有没有懂 | `references/comprehension-check.md` |
@@ -44,18 +45,19 @@ metadata:
 | 想对照写法 | `references/domain-examples.md` |
 | 用户明确要长篇 | `references/long-article-engine.md` |
 | 排版 | `assets/templates/article-output-template.md` |
+| 交稿呈现（默认折叠） | `references/folded-presentation.md` |
 | 需要空白骨架 | `bun run generate-template -- -t "<知识点>" -s <style> -l <default|expand|long>` |
 | 输入分类 | `bun run validate-input -- "<输入>"`；标准输入用 `-` |
 | 交稿前结构自检 | `bun run check-output -- <result.md> --level <default|expand|long> --style <style> [--facts <绝对临时事实清单.json>]` |
 | 本地论文评测 | `bun run evaluate-pdf -- <pdf-path> --style <style> --workspace <绝对、空、无 .git 的临时目录> [--render]` |
 
-情况回复只住在 `author-voice.md`；映射原则只住在 `mapping-principles.md`；风格细节只住在各自风格文件；门禁规则只住在 `lao-yu-gate.md`；事实分类只住在 `fact-traceability.md`；理解检验只住在 `comprehension-check.md`。不要把这些规则复制进正文。
+情况回复只住在 `author-voice.md`；映射原则只住在 `mapping-principles.md`；风格细节只住在各自风格文件；门禁规则只住在 `lao-yu-gate.md`；事实分类只住在 `fact-traceability.md`；理解检验只住在 `comprehension-check.md`；折叠呈现只住在 `folded-presentation.md`。不要把这些规则复制进正文。
 
 普通对话只需要 `SKILL.md`。Bun 脚本是可选工具，没有 Bun 也能完成解释。
 
 ## 工作流
 
-按顺序做。第 1–3 步与门禁草稿放进 `<details>`；用户第一眼只看到一篇正文与知识点校验。完整映射表可以留在折叠区。
+按顺序做。第 1–3 步与门禁草稿写入内部完整稿的 `<details>`。交稿默认折叠：先读 `references/folded-presentation.md`，读者只看到标题和正文。理解、事实清单、门禁自检不出现在回复里。映射留在完整稿中，用户追问时按该文件把含义标在文中对应句后，不另贴映射表。`check-output` 仍检查完整稿。用户明确要求展开完整稿时，才把完整骨架交给读者。
 
 ### 0. 论文导航（仅论文输入）
 
@@ -108,14 +110,14 @@ metadata:
 
 ## 输出骨架
 
-使用 `assets/templates/article-output-template.md`。标题下必须有：
+使用 `assets/templates/article-output-template.md` 写内部完整稿。完整稿标题下必须有：
 
 ```markdown
-> 表达风格：`<anime|detective|war-room|nature-documentary|neutral>`
+> 表达风格：`<anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>`
 > 篇幅：`<default|expand|long>`
 ```
 
-结构为：折叠分析（理解、事实清单、映射、风格选择、门禁自检）→ 一篇正文 → 知识点校验 → 可选理解检验。论文事实清单与页码锚点只能留在折叠分析或临时评测；正常交稿只有在用户要求来源时才展示锚点。
+内部完整稿的结构为：折叠分析（理解、事实清单、映射、风格选择、门禁自检）→ 一篇正文 → 知识点校验 → 可选理解检验。论文事实清单与页码锚点只能留在折叠分析或临时评测；只有在用户要求来源时才展示锚点。默认交稿不把这份骨架交给读者，只出标题和正文，规则见 `references/folded-presentation.md`。上面的风格与篇幅两行写在完整稿里，供 `check-output` 读取。
 
 ## 输入边界
 
@@ -127,13 +129,13 @@ metadata:
 
 ## 反向修正
 
-用户说没懂或有错时：回到事实清单定位节点 → 修正映射 → 只重写受影响的正文片段 → 再过门禁。不要用更浓的风格掩盖错误。
+用户说没懂或有错时：回到事实清单定位节点 → 修正映射 → 只重写受影响的正文片段 → 再过门禁。不要用更浓的风格掩盖错误。这些修改先落在内部完整稿，再按 `references/folded-presentation.md` 重出受影响的正文。
 
 ## Verification
 
 交稿前确认：
 
-- [ ] 分析在 `<details>` 内；正文只出现一次。
+- [ ] 分析在内部完整稿的 `<details>` 内；正文只出现一次。默认交给读者的回复只有标题和正文。
 - [ ] 映射能对照输入、步骤、约束、输出；关键映射写出适用边界。
 - [ ] 所有关键事实均在正文或知识点校验中被保留；论文事实都有临时页码锚点。严格论文评测中，每个 `[F#]` 同时出现在映射表与知识点校验。
 - [ ] 标题下的 `> 表达风格：` 与 `> 篇幅：` 标识正确；正文落在当前篇幅档。

@@ -3,7 +3,8 @@
 > 表达风格：`anime`
 > 篇幅：`default`
 
-<!-- 将 anime 替换为 detective、war-room、nature-documentary 或 neutral；将 default 替换为实际篇幅档。 -->
+<!-- 将 anime 替换为 detective、war-room、nature-documentary、verse、narrative、podcast 或 neutral；将 default 替换为实际篇幅档。 -->
+<!-- 本骨架是内部完整稿，生成器仍输出它。默认交稿投影是折叠：读者只看到标题和正文，规则见 references/folded-presentation.md。 -->
 
 <details>
 <summary>分析过程（点击展开）</summary>

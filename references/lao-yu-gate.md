@@ -2,7 +2,7 @@
 
 第 5 步必读。白居易写完诗念给不识字的人听：解，则录；不解，则易。本技能用同一环：写完先自测，过关再交稿。
 
-本文件管「转换出来的知识能不能听懂」。它对 `anime`、`detective`、`war-room`、`nature-documentary` 与 `neutral` 完全相同；情况回复不管这里，见 `author-voice.md`。
+本文件管「转换出来的知识能不能听懂」。它对 `anime`、`detective`、`war-room`、`nature-documentary`、`verse`、`narrative`、`podcast` 与 `neutral` 完全相同；情况回复不管这里，见 `author-voice.md`。
 
 ## 过关标准
 
