@@ -1,101 +1,68 @@
 # conversion-skill
 
-**可验证的复杂知识解释 Skill。** 让复杂知识变得易懂，同时让每个比喻都有据可查。
+**可验证的复杂知识解释 Skill。** 把拗口的公式、协议、论文或系统机制，转化为普通人顺着直觉就能听懂、读完能用自己话复述的清晰解释——同时让每一个比喻都有据可查、有边界可核对。
 
-English: Mechanism Explainer — explain complex knowledge with traceable analogies and factual verification. It is an [Agent Skill](https://agentskills.io) for Claude Code, Cursor, Codex, Copilot, Gemini CLI, and other hosts that read `SKILL.md`.
+English: Mechanism Explainer — explain complex mechanisms through natural intuition, traceable analogies, and factual verification. Built as an [Agent Skill](https://agentskills.io) for Claude Code, Cursor, Codex, Copilot, Gemini CLI, and other hosts that read `SKILL.md`.
 
-读了好几遍还不懂的公式、协议、论文或系统机制，可以变成普通人听完能复述的短解释。解释必须留下概念映射和知识点校验；比喻只能帮助理解，不能偷偷改掉机制。二次元、侦探推理、项目战情室和自然纪录片都还在，但它们是可选表达，不是这个项目要推销的身份。
+很多解释之所以让人看不懂，要么是因为「用术语解释术语」，要么是因为「硬套一层尴尬的故事外皮（比如把术语直接音译成人名去报幕）」。`conversion-skill` 采用**「先抓认知卡点 → 再搭同构场景 → 自然叙事展开 → 严谨事实校验」**的转化思路，支持轻快叙事（默认）、侦探推理、项目战情室、自然纪录片、记叙文、播客对谈、现代短诗与中性直述。
 
-核心能力只靠一份 Markdown Skill。普通使用不需要 Bun、TypeScript 或 Python。
+核心能力完全由纯 Markdown 驱动，日常使用无需安装 Bun、TypeScript 或 Python。
 
 ```bash
 npx skills add songhangze985-eng/conversion-skill
 ```
 
-装好后直接说「帮我理解快速排序的运行原理」即可。目录名和 YAML `name` 都是 `conversion-skill`，不要改成 `conversion`。
+安装后直接对助手说「帮我理解快速排序的运行原理」或「用侦探推理讲讲贝叶斯更新」即可。请保持目录名与 YAML `name` 均为 `conversion-skill`。
 
-## 它实际长什么样
+## 转化效果示例
 
-下面这一组材料可以在仓库里核对。Skill 回答来自 [`references/domain-examples.md`](references/domain-examples.md) 的达标样例，不是某次线上模型的原始日志。普通模型对照尚未执行，因此这里不伪造「无 Skill」回答，也不宣称理解能力提高了多少。
+以下样例来自仓库内的标准示范（[references/domain-examples.md](references/domain-examples.md)），展示如何从干瘪的定义转化为自然、有画面感且严守机制边界的解释。
 
-**输入**
+**原始输入**
 
-选一个 pivot，小的放左、大的放右，递归处理两边。
+快速排序（Quicksort）：选一个基准值（pivot），比它小的放左边，比它大的放右边，然后对左右两边递归执行同样的过程。
 
-**Skill 样例（已核对）**
+**转化正文（日常场景叙事）**
 
-运动会预选。皮沃特老师随手点一个人当达标线。「达标左边，没达标右边。定线的人这轮不比了，名次卡在两拨中间。」小快问：「一直分？」老师：「一组只剩一个人就不比。选哪条线都行，选偏了只是慢，名次仍对。」
+体测排队，体育老师想让三十个高矮不一的学生按身高从矮到高站好。如果让大家两两比身高挪位置，场面很快就乱成一锅粥。
 
-外行应能复述：先定一条线把人分成两拨，定线的人位置先钉死，两拨再各自重复，直到没法再分。
+老师换了个办法：随手点名排头的阿杰站出来当「标杆」。所有人只跟阿杰一个人比——比阿杰矮的统统站到他左手边，比他高的统统站到他右手边。
 
-**概念映射**
+这一轮比完，神奇的事情发生了：虽然左右两拨人内部还是乱的，但阿杰自己的最终名次已经彻底锁死了——左边绝没有人比他高，右边也绝没有人比他矮，他往两拨人中间一站，这辈子都不用再挪窝。
+
+接下来，左右两拨人各自再点一个新标杆，照着同一个规矩继续对半分。哪一拨分到只剩一个人，不用比也知道排好了，自然停下。至于最开始点谁当标杆？其实点谁都不会排错名次，顶多是运气不好点到了最矮或最高的人，得多分几轮、慢一点而已。
+
+**概念映射（内部完整稿核对表）**
 
 | 知识概念 | 类比元素 | 对应机制 | 适用边界 |
 |---|---|---|---|
-| pivot | 本轮达标线 | 用来分组的基准 | 选哪条线只影响快慢，不决定名次对错 |
-| 分区 | 达标站左、不达标站右 | 按与基准的比较结果分组 | 不是按身高、学号或其他无关属性排队 |
-| 递归 | 两组再各自选新达标线 | 对子组重复同一规则 | 不是两组之间再比一次总分 |
-| 终止 | 一组只剩一人就不比 | 规模 ≤1 时停止 | 不是永远分下去 |
-| pivot 不再比 | 定线的人本轮名次锁定 | 分区后位置已定 | 定线的人不是本轮冠军 |
+| 基准值（Pivot） | 被点出来当标杆的阿杰 | 作为本轮唯一比较基准，将人群一分为二 | 选谁当标杆只影响分队轮数（效率），不影响最终排队结果（正确性） |
+| 分区（Partition） | 比他矮站左边、比他高站右边 | 所有元素仅与基准比较并归入左右子集 | 拆开后的左右两拨内部此时还没排好序，不能当成已经排完 |
+| Pivot 位置锁定 | 阿杰站定中间、后续不再挪窝 | 分区完成后，基准元素已处于全局最终位置 | 锁定的是标杆自己的位置，不是左右两侧人的位置 |
+| 递归（Recursion） | 左右两拨各自再选新标杆重复分队 | 对左右子区间独立应用同一套分区规则 | 左右两拨人之间永远不需要再跨组比较 |
+| 递归终止条件 | 分到只剩一个人时自然停下 | 子区间长度 ≤ 1 时停止继续拆分 | 不能无限拆分下去 |
 
 **知识点校验**
 
-快排每轮选 pivot 分区，pivot 位置确定后不再递归，对左右子组重复，子组规模 ≤1 时停止。pivot 影响效率不影响正确性。
+快速排序每轮选定一个基准值（pivot）进行分区，小者居左、大者居右；分区结束后该基准值的全局最终位置即被锁定，随后对左右两个子区间递归执行相同操作，直至子区间长度 ≤ 1 时终止。基准值的选择仅影响时间复杂度，不影响排序结果的正确性。
 
-**普通模型对照**
+## 安装指南
 
-未执行。若要补做，使用同一输入、同一模型版本和 [`evals/protocol.md`](evals/protocol.md) 的 A/B/C 框架，把原始输出写入仓库外的记录，不要在这里编一段「基座模型会这样答」。
+### 一键安装（推荐）
 
-贝叶斯更新的侦探版样例也在 `references/domain-examples.md`，同样带有适用边界：没线索不等于宣告无罪，招供也不等于概率更新。
-
-## 安装
-
-### 已验证的一键安装
-
-在 2026-09-17 的 Windows + Cursor CLI 环境中，[skills CLI](https://github.com/vercel-labs/skills) 能够识别本仓库、发现根目录 `SKILL.md`，并完成安装。下面这行就是实际跑通的命令：
+通过 [skills CLI](https://github.com/vercel-labs/skills) 一键拉取并安装到当前环境：
 
 ```bash
 npx skills add songhangze985-eng/conversion-skill
 ```
 
-当时 CLI 检测到 Cursor，走了非交互安装，技能落到当前项目的 `.agents/skills/conversion-skill/`，并复制到本机已检测到的多个宿主。YAML `name` 与文件夹名都是 `conversion-skill`。
-
-在普通交互终端里，同一行可能会先让你选宿主。若只想先确认仓库里有没有这个技能，可以运行：
+如需查看仓库中包含的技能列表：
 
 ```bash
 npx skills add songhangze985-eng/conversion-skill -l
 ```
 
-它应当列出 `conversion-skill`。
-
-[skills.sh](https://www.skills.sh/songhangze985-eng/conversion-skill/conversion-skill) 在 2026-09-17 仍返回「isn't available in this repository」。这是目录站点的外部状态，不是本仓库缺少 `SKILL.md`。在该页恢复之前，不要把 skills.sh 写成已经可装。
-
-安装成功只证明文件就位。宿主会不会在下一句对话里自动触发 Skill，取决于具体产品，当前标记为未验证。
-
-### Windows
-
-PowerShell：
-
-```powershell
-npx skills add songhangze985-eng/conversion-skill
-```
-
-若只能手动拷贝：
-
-```powershell
-git clone https://github.com/songhangze985-eng/conversion-skill.git
-Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.agents\skills\conversion-skill"
-```
-
-Cursor 用户也可以拷到 `"$env:USERPROFILE\.cursor\skills\conversion-skill"`，Codex 则是 `"$env:USERPROFILE\.codex\skills\conversion-skill"`。文件夹名必须是 `conversion-skill`。
-
-### macOS / Linux
-
-```bash
-npx skills add songhangze985-eng/conversion-skill
-```
-
-手动安装：
+### 手动安装（macOS / Linux）
 
 ```bash
 git clone https://github.com/songhangze985-eng/conversion-skill.git
@@ -103,44 +70,33 @@ mkdir -p ~/.agents/skills
 cp -R conversion-skill ~/.agents/skills/conversion-skill
 ```
 
-其他宿主把同一目录放到各自的 skills 根目录即可，例如 `~/.claude/skills/conversion-skill` 或 `~/.cursor/skills/conversion-skill`。
+（Claude Code、Cursor 等宿主也可直接复制到 `~/.claude/skills/conversion-skill` 或 `~/.cursor/skills/conversion-skill`。）
 
-### 无终端时
+### 手动安装（Windows PowerShell）
 
-下载 [SKILL.md](https://raw.githubusercontent.com/songhangze985-eng/conversion-skill/main/SKILL.md)，在支持上传 Skill 的产品设置里导入。可选脚本不会一起生效，但不影响普通解释。
+```powershell
+git clone https://github.com/songhangze985-eng/conversion-skill.git
+Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.agents\skills\conversion-skill"
+```
 
-### 安装验收
+### 网页端无终端使用
 
-1. 目标目录存在 `SKILL.md`。
-2. 该文件的 YAML `name` 是 `conversion-skill`。
-3. 文件夹名也是 `conversion-skill`，不要改成 `conversion`。
-4. 对宿主说：「帮我理解快速排序的运行原理。」若技能被触发，输出应有映射和知识点校验；若没有触发，先检查目录名，再显式提到 conversion-skill。自动触发本身需要在你的宿主里复核。
+直接下载 [SKILL.md](https://raw.githubusercontent.com/songhangze985-eng/conversion-skill/main/SKILL.md) 并上传至支持自定义 Skill 的 Web 界面即可。
 
-### 可选工具依赖
+## 如何使用
 
-日常使用只需要宿主能读 `SKILL.md`。`scripts/` 里的 Bun/TypeScript 工具用来做输入分流、骨架生成、结构检查和本地 PDF 评测，**不是**普通解释的前提。要用这些工具时再安装 [Bun](https://bun.sh/) 1.1 或更高版本，并在仓库根目录运行 `bun install`。没有 Bun 也能把知识讲懂。
+安装后直接用自然语言提问即可触发，例如：
 
-## 怎么用
+- 「帮我理解快速排序的运行原理。」
+- 「用侦探破案的方式讲讲贝叶斯定理，顺便说说这个比喻在哪儿会失效。」
+- 「用播客对谈的形式聊聊 TCP 三次握手为什么不能只握两次。」
+- 「用通俗的话解释这篇论文的核心贡献，保留它的前提限制。」
 
-技能靠 `SKILL.md` 的 description 匹配自然语言。用户不必先打技能名。下面三句都应该走进同一套工作流：理解、提炼事实、做可对照的类比、写出短解释、再用非故事腔校验。
+如果你想指定表达方式，可以在提问中带上：「用侦探推理」「用项目战情室」「用自然纪录片」「写成一篇记叙文」「做成播客对谈」「写首现代短诗」或「不要故事，直接用中性大白话讲清楚」。
 
-「帮我理解快速排序的运行原理。」
+## 可选本地校验工具（Bun）
 
-「用通俗的语言解释这篇论文的核心贡献，保留重要限制。」
-
-「用侦探推理的方式讲解贝叶斯定理，并指出比喻在哪些地方不成立。」
-
-用户说看不懂、太抽象、讲人话、用比喻讲清楚、老妪能解，或要一篇论文的核心贡献时，也应触发。只要一句话、不要映射，或者是在写小说、翻译、会议纪要、代码审查、导出 PDF 原文，则不应触发。
-
-默认正文不超过 800 字，默认表达仍是二次元。可以说「用轻度」「用项目战情室」「用自然纪录片」「用诗篇」「用记叙文」「用播客对谈」或「不要故事，直接讲」。当比喻保不住机制时，技能应改口中性说明。若还想检查自己有没有懂，可以要求一道复述题和一道迁移题；普通使用默认不出题。
-
-## 它保证什么，不保证什么
-
-它保证解释可以核对：事实清单、映射、适用边界和知识点校验是给读者和评测者看的，不是装饰。论文输入会先建带页码锚点的临时事实清单；读不清就停，不编来源。
-
-它不保证「理解能力提升百分之多少」，也不保证每次都比未安装的模型更好。那些结论只能来自 [`evals/`](evals/) 里的对照实验。现有 `check-output` 通过，只说明结构或术语覆盖齐了，不能说明知识正确，更不能说明用户已经掌握。
-
-## 可选本地命令
+仓库 `scripts/` 目录下提供了用于本地结构检查与评测的 TypeScript 工具（日常对话无需运行）：
 
 ```bash
 bun install
@@ -149,8 +105,6 @@ bun run validate-input -- "贝叶斯定理 P(A|B)=P(B|A)P(A)/P(B)"
 bun run generate-template -- -t "快速排序" -s detective --with-comprehension
 bun run check-output -- evals/fixtures/ok-four-col.md --style detective
 ```
-
-`evaluate-pdf` 只在仓库外的空临时目录工作，不调用 Git，也不生成故事正文。评测怎么跑，见 [`evals/README.md`](evals/README.md)。
 
 ## 许可
 

@@ -186,7 +186,11 @@ export function checkMappingTable(markdown: string): MappingCheck {
     if (rows.length === 0) return { ok: false, rows, error: "映射表没有任何非空数据行" };
     return { ok: true, rows };
   }
-  return { ok: false, rows: [], error: "未找到包含知识概念、故事元素、对应理由的映射表" };
+  return {
+    ok: false,
+    rows: [],
+    error: "缺失映射表（需包含 '### 3. 意象映射'、'## 概念与映射'、'## 机制与演化映射' 或 '| 知识概念 |' 表头，且列中有知识概念、类比元素与对应机制）",
+  };
 }
 
 function sectionAfterHeading(markdown: string, heading: RegExp): string {
@@ -230,8 +234,10 @@ function verificationOk(markdown: string): boolean {
 }
 
 function declaredStyle(markdown: string): string | null {
-  const match = /^>\s*(?:表达风格|皮肤)\s*[：:]\s*`?([a-z-]+)`?\s*$/mu.exec(markdown);
-  return match?.[1] ?? null;
+  const strict = /^>\s*(?:表达风格|风格标签|皮肤)\s*[：:]\s*`?([a-z-]+)`?\s*$/mu.exec(markdown);
+  if (strict?.[1]) return strict[1];
+  const loose = /(?:表达风格|风格标签)\s*[:：]\s*`([a-z-]+)`/iu.exec(markdown);
+  return loose?.[1] ?? null;
 }
 
 function loadFactLedger(path: string | undefined, mapping: MappingCheck, requireFacts: boolean): LoadedLedger {
