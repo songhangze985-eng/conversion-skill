@@ -1,6 +1,7 @@
-/** Shared, dependency-free helpers for the Bun command-line tools. */
+/** Shared helpers for the Bun command-line tools. HanLP helpers are optional. */
 
 import { isAbsolute, relative } from "node:path";
+import { computeSemanticSimilarity, segmentTextLocal, type CustomDictionary } from "./hanlp-helper";
 
 export const EXPRESSION_STYLES = [
   "anime",
@@ -53,6 +54,22 @@ export function markdownWordCount(markdown: string): number {
 
 export function normalizedContains(haystack: string, needle: string): boolean {
   return haystack.toLocaleLowerCase().includes(needle.toLocaleLowerCase());
+}
+
+export function hanlpTokenCount(markdown: string, customDict?: CustomDictionary): number {
+  const tokens = segmentTextLocal(markdown, customDict).filter((token) => token.trim().length > 0 && !/^[\p{P}\s]+$/u.test(token));
+  return tokens.length;
+}
+
+export function semanticContains(
+  haystack: string,
+  needle: string,
+  threshold = 0.65,
+  customDict?: CustomDictionary,
+): { matched: boolean; exact: boolean; similarity: number } {
+  if (normalizedContains(haystack, needle)) return { matched: true, exact: true, similarity: 1 };
+  const similarity = computeSemanticSimilarity(haystack, needle, customDict);
+  return { matched: similarity >= threshold, exact: false, similarity };
 }
 
 export function relativeIsInside(parent: string, child: string): boolean {

@@ -10,14 +10,17 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, loadCustomDictionary, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
 import {
   EXPRESSION_STYLES,
   LEVEL_LIMITS,
+  hanlpTokenCount,
   isExpressionStyle,
   isOutputLevel,
   markdownWordCount,
   normalizedContains,
   printJson,
+  semanticContains,
   type ExpressionStyle,
   type OutputLevel,
   usageError,
@@ -58,7 +61,7 @@ export interface FactLedger {
 }
 
 export type GateVerdict = "PASS" | "FAIL";
-export type ReviewVerdict = "NEEDS_REVIEW";
+export type ReviewVerdict = "NEEDS_REVIEW" | "HANLP_ASSISTED_PASS" | "HANLP_ASSISTED_WARN";
 export type ComprehensionVerdict = "NOT_REQUESTED" | "STRUCTURE_PRESENT_NEEDS_REVIEW";
 
 interface MappingRow {
@@ -88,6 +91,21 @@ export interface OutputCheckOptions {
   expectedStyle?: ExpressionStyle;
   factsPath?: string;
   requireFacts?: boolean;
+  hanlpOptions?: HanLPOptions;
+  stsThreshold?: number;
+  maxDepDepth?: number;
+  precomputedStoryNlp?: HanLPDocumentAnalysis;
+}
+
+export interface HanLPQualityReport {
+  backend: string;
+  story_token_count: number;
+  max_dep_tree_depth: number;
+  avg_dep_tree_depth: number;
+  complex_sentences: Array<{ sentence: string; tokenCount: number; treeDepth: number }>;
+  unexplained_jargon: string[];
+  fact_semantic_scores: Array<{ fact_id: string; claim_similarity: number; matched_semantically: boolean }>;
+  lao_yu_readability_score: number;
 }
 
 export interface OutputCheckResult {
@@ -120,6 +138,7 @@ export interface OutputCheckResult {
   comprehension_verdict: ComprehensionVerdict;
   verdict_scope: "mechanical_only";
   verdict: "PASS" | "FAIL";
+  hanlp_report?: HanLPQualityReport;
 }
 
 export function readMarkdown(path: string): string {
@@ -310,18 +329,28 @@ function loadFactLedger(path: string | undefined, mapping: MappingCheck, require
   return { provided: true, path, valid: errors.length === 0 && facts.length > 0, errors, facts };
 }
 
-function factCoverage(markdown: string, mapping: MappingCheck, ledger: LoadedLedger): { covered: string[]; missing: string[]; mappingMissing: string[]; ok: boolean } {
+function factCoverage(
+  markdown: string,
+  mapping: MappingCheck,
+  ledger: LoadedLedger,
+  semantic?: { threshold: number; dictPath?: string },
+): { covered: string[]; missing: string[]; mappingMissing: string[]; ok: boolean } {
   const content = `${storyBody(markdown)}\n${verificationText(markdown)}`;
   const mappingText = mapping.rows.map((row) => `${row.source}\n${row.story}\n${row.reason}`).join("\n");
   const verification = verificationText(markdown);
   const covered: string[] = [];
   const missing: string[] = [];
   const mappingMissing: string[] = [];
+  const dict = semantic ? loadCustomDictionary(semantic.dictPath) : undefined;
+  const covers = (haystack: string, term: string): boolean => {
+    if (normalizedContains(haystack, term)) return true;
+    return Boolean(semantic && semanticContains(haystack, term, semantic.threshold, dict).matched);
+  };
 
   for (const fact of ledger.facts) {
-    const contentMissing = (fact.required_terms ?? []).filter((term) => !normalizedContains(content, term));
+    const contentMissing = (fact.required_terms ?? []).filter((term) => !covers(content, term));
     const mappingTerms = fact.mapping_terms ?? [];
-    const absentMappingTerms = mappingTerms.filter((term) => !normalizedContains(mappingText, term));
+    const absentMappingTerms = mappingTerms.filter((term) => !covers(mappingText, term));
     // Synthetic facts derived from a mapping table have no source IDs. External
     // PDF ledgers do: requiring those IDs makes the evidence trail auditable.
     const hasMappingId = !ledger.provided || normalizedContains(mappingText, fact.id);
@@ -360,17 +389,29 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const style_ok = style !== null && isExpressionStyle(style) && (!options.expectedStyle || style === options.expectedStyle);
   const voice_leaks = VOICE_LEAKS.filter((phrase) => normalizedContains(`${storyBody(markdown)}\n${verificationText(markdown)}`, phrase));
   const ledger = loadFactLedger(options.factsPath, mapping, Boolean(options.requireFacts));
-  const coverage = factCoverage(markdown, mapping, ledger);
+  const hanlpEnabled = Boolean(options.hanlpOptions?.enabled || options.precomputedStoryNlp);
+  const stsThreshold = options.stsThreshold ?? 0.62;
+  const coverage = factCoverage(
+    markdown,
+    mapping,
+    ledger,
+    hanlpEnabled ? { threshold: stsThreshold, dictPath: options.hanlpOptions?.customDictPath } : undefined,
+  );
   const leak_ok = voice_leaks.length === 0;
   const has_mapping_bounds = mapping.ok && mapping.rows.length > 0 && mapping.rows.every((row) => Boolean(row.boundary));
   const has_comprehension_section = hasComprehensionSection(markdown);
   const structure_verdict: GateVerdict = mapping.ok && verify && level_ok && style_ok && leak_ok ? "PASS" : "FAIL";
   const term_id_coverage_verdict: GateVerdict = coverage.ok ? "PASS" : "FAIL";
-  const semantic_quality_verdict: ReviewVerdict = "NEEDS_REVIEW";
   const comprehension_verdict: ComprehensionVerdict = has_comprehension_section
     ? "STRUCTURE_PRESENT_NEEDS_REVIEW"
     : "NOT_REQUESTED";
   const verdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
+  const hanlp_report = hanlpEnabled ? buildHanlpReport(markdown, options, ledger, stsThreshold) : undefined;
+  const semantic_quality_verdict: ReviewVerdict = !hanlp_report
+    ? "NEEDS_REVIEW"
+    : hanlp_report.lao_yu_readability_score >= 75 && term_id_coverage_verdict === "PASS"
+      ? "HANLP_ASSISTED_PASS"
+      : "HANLP_ASSISTED_WARN";
 
   return {
     has_mapping_table: mapping.ok,
@@ -402,12 +443,61 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
     comprehension_verdict,
     verdict_scope: "mechanical_only",
     verdict,
+    ...(hanlp_report ? { hanlp_report } : {}),
   };
+}
+
+function buildHanlpReport(
+  markdown: string,
+  options: OutputCheckOptions,
+  ledger: LoadedLedger,
+  stsThreshold: number,
+): HanLPQualityReport {
+  const body = storyBody(markdown);
+  const nlp = options.precomputedStoryNlp ?? analyzeWithHanLPSync(body || markdown, options.hanlpOptions);
+  const dict = loadCustomDictionary(options.hanlpOptions?.customDictPath);
+  const mappingArea = markdown.match(/<details[\s\S]*?<\/details>/iu)?.[0] ?? mappingRowsText(markdown);
+  const unexplained = [...new Set(nlp.entities
+    .map((entity) => entity.text)
+    .filter((text) => text.length >= 2 && normalizedContains(body, text) && mappingArea.length > 0 && !normalizedContains(mappingArea, text)))];
+  const maxDepDepth = options.maxDepDepth ?? 7;
+  const fact_semantic_scores = ledger.facts.map((fact) => {
+    const claimSimilarity = fact.claim ? computeClaimSimilarity(body, verificationText(markdown), fact.claim, dict) : 0;
+    return {
+      fact_id: fact.id,
+      claim_similarity: claimSimilarity,
+      matched_semantically: claimSimilarity >= stsThreshold || normalizedContains(`${body}\n${verificationText(markdown)}`, fact.id),
+    };
+  });
+  const depthPenalty = Math.max(0, (nlp.depDiagnostics.avgTreeDepth - 4) * 8);
+  const complexPenalty = nlp.depDiagnostics.complexSentences.filter((sentence) => sentence.treeDepth > maxDepDepth).length * 6;
+  const jargonPenalty = Math.min(20, unexplained.length * 4);
+  return {
+    backend: nlp.backendUsed,
+    story_token_count: hanlpTokenCount(body, dict),
+    max_dep_tree_depth: nlp.depDiagnostics.maxTreeDepth,
+    avg_dep_tree_depth: nlp.depDiagnostics.avgTreeDepth,
+    complex_sentences: nlp.depDiagnostics.complexSentences,
+    unexplained_jargon: unexplained,
+    fact_semantic_scores,
+    lao_yu_readability_score: Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty - jargonPenalty))),
+  };
+}
+
+function mappingRowsText(markdown: string): string {
+  return markdown.split(/\r?\n/u).filter((line) => line.trim().startsWith("|")).join("\n");
+}
+
+function computeClaimSimilarity(body: string, verification: string, claim: string, dict: ReturnType<typeof loadCustomDictionary>): number {
+  const target = `${body}\n${verification}`;
+  return Math.max(semanticContains(target, claim, 0, dict).similarity, normalizedContains(target, claim) ? 1 : 0);
 }
 
 function reviewLabel(verdict: ReviewVerdict | ComprehensionVerdict): string {
   if (verdict === "NOT_REQUESTED") return "未请求（不能据此判断用户已理解）";
   if (verdict === "STRUCTURE_PRESENT_NEEDS_REVIEW") return "已见题目结构，需要人工或模型复核";
+  if (verdict === "HANLP_ASSISTED_PASS") return "HanLP 辅助可读性通过，仍需人工复核语义";
+  if (verdict === "HANLP_ASSISTED_WARN") return "HanLP 辅助发现拗口句或未铺垫术语，需要改稿";
   return "需要人工或模型复核";
 }
 
@@ -427,6 +517,12 @@ function render(result: OutputCheckResult): string {
     `  语义质量评估: ${reviewLabel(result.semantic_quality_verdict)}`,
     `  用户理解验证: ${reviewLabel(result.comprehension_verdict)}`,
   ];
+  if (result.hanlp_report) {
+    lines.push(`  HanLP 辅助: ${result.hanlp_report.backend}，老妪能解可读性 ${result.hanlp_report.lao_yu_readability_score}`);
+    if (result.hanlp_report.unexplained_jargon.length > 0) {
+      lines.push(`    未铺垫术语: ${result.hanlp_report.unexplained_jargon.slice(0, 5).join("、")}`);
+    }
+  }
   if (result.missing.length > 0) lines.push(`  正文/校验未覆盖: ${result.missing.join("；")}`);
   if (result.mapping_missing.length > 0) lines.push(`  映射表未覆盖: ${result.mapping_missing.join("；")}`);
   lines.push(`结论(仅机械门禁): ${result.verdict}`);
@@ -435,19 +531,27 @@ function render(result: OutputCheckResult): string {
 }
 
 function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语和语义相似度；不改变机械 verdict 的字段\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
 }
 
-function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean } {
+function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number } {
+  const hanlp = parseHanLPCliOptions(argv);
   let file: string | undefined;
   let level: OutputLevel = "default";
   let factsPath: string | undefined;
   let expectedStyle: ExpressionStyle | undefined;
   let requireFacts = false;
   let json = false;
+  let stsThreshold: number | undefined;
+  let maxDepDepth: number | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    const hanlpEnd = consumeHanlpArg(argv, index);
+    if (hanlpEnd !== null) {
+      index = hanlpEnd;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       help();
       process.exit(0);
@@ -479,6 +583,20 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
       index += 1;
       continue;
     }
+    if (arg === "--sts-threshold") {
+      const value = Number(argv[index + 1]);
+      if (!Number.isFinite(value) || value < 0 || value > 1) usageError("--sts-threshold 需要 0 到 1 之间的数字");
+      stsThreshold = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--max-dep-depth") {
+      const value = Number(argv[index + 1]);
+      if (!Number.isInteger(value) || value < 1) usageError("--max-dep-depth 需要正整数");
+      maxDepDepth = value;
+      index += 1;
+      continue;
+    }
     if (arg === "--style") {
       const value = argv[index + 1];
       if (!value || !isExpressionStyle(value)) usageError(`--style 只能是 ${EXPRESSION_STYLES.join("、")}`);
@@ -491,18 +609,30 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
     file = arg;
   }
   if (!file) usageError("请提供 Markdown 路径");
-  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json };
+  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth };
 }
 
 if (import.meta.main) {
   const args = parseArgs(Bun.argv.slice(2));
-  const result = analyzeMarkdown(readMarkdown(args.file), {
-    level: args.level,
-    factsPath: args.factsPath,
-    expectedStyle: args.expectedStyle,
-    requireFacts: args.requireFacts,
+  const run = async (): Promise<void> => {
+    const markdown = readMarkdown(args.file);
+    const precomputedStoryNlp = args.hanlp.enabled ? await analyzeWithHanLP(storyBody(markdown) || markdown, args.hanlp) : undefined;
+    const result = analyzeMarkdown(markdown, {
+      level: args.level,
+      factsPath: args.factsPath,
+      expectedStyle: args.expectedStyle,
+      requireFacts: args.requireFacts,
+      hanlpOptions: args.hanlp,
+      stsThreshold: args.stsThreshold,
+      maxDepDepth: args.maxDepDepth,
+      precomputedStoryNlp,
+    });
+    if (args.json) printJson(result);
+    else process.stdout.write(`${render(result)}\n`);
+    process.exit(result.verdict === "PASS" ? 0 : 1);
+  };
+  run().catch((error: unknown) => {
+    process.stderr.write(`错误：${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(2);
   });
-  if (args.json) printJson(result);
-  else process.stdout.write(`${render(result)}\n`);
-  process.exit(result.verdict === "PASS" ? 0 : 1);
 }

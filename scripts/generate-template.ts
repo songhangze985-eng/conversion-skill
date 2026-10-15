@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 /** Generate the five-step Markdown skeleton for a selected expression style. */
 
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
 import { isExpressionStyle, isOutputLevel, type ExpressionStyle, type OutputLevel, usageError } from "./shared";
 
 const STYLE_DESCRIPTIONS: Record<ExpressionStyle, string> = {
@@ -26,6 +28,29 @@ const LEGACY_STYLE_ALIASES: Record<string, { style: ExpressionStyle; intensity: 
   heavy: { style: "anime", intensity: "heavy" },
 };
 
+function prefillFromSource(sourceText: string, hanlpOptions?: HanLPOptions, analysis?: HanLPDocumentAnalysis): { facts: string; mappingRows: string } {
+  const resolved = analysis ?? analyzeWithHanLPSync(sourceText, hanlpOptions?.enabled ? hanlpOptions : { ...hanlpOptions, enabled: false, mode: "local-fallback" });
+  const factLines = resolved.srlFrames.slice(0, 4).map((frame) => {
+    const trigger = frame.triggerOrCondition.join("、") || "（待填写触发条件）";
+    const actor = frame.actorArg0.join("、") || "（待填写主体）";
+    const target = frame.targetArg1.join("、") || "（待填写对象）";
+    const constraint = frame.constraintsOrManner.join("、") || "（待填写约束）";
+    return `- [条件] ${trigger} -> [主体] ${actor} -> [动作] ${frame.predicate} -> [对象] ${target} -> [限制] ${constraint}`;
+  });
+  const concepts = [...new Set([
+    ...resolved.keyphrases.map((item) => item.phrase),
+    ...resolved.entities.map((entity) => entity.text),
+  ])].filter((term) => term.trim().length >= 2).slice(0, 6);
+  return {
+    facts: factLines.length > 0
+      ? `- 原文事实：\n${factLines.join("\n")}`
+      : "- 原文事实：",
+    mappingRows: concepts.length > 0
+      ? concepts.map((concept) => `| ${concept} |  |  |  |`).join("\n")
+      : "|  |  |  |  |",
+  };
+}
+
 export function renderTemplate(
   topic: string,
   style: ExpressionStyle,
@@ -33,7 +58,11 @@ export function renderTemplate(
   withFormula: boolean,
   intensity = "standard",
   withComprehension = false,
+  sourceText?: string,
+  hanlpOptions?: HanLPOptions,
+  analysis?: HanLPDocumentAnalysis,
 ): string {
+  const prefill = sourceText?.trim() ? prefillFromSource(sourceText, hanlpOptions, analysis) : undefined;
   const formulaSection = withFormula
     ? `### 公式含义
 
@@ -72,7 +101,7 @@ ${formulaSection}### 1. 理解
 
 ### 2. 提炼
 
-- 原文事实：
+${prefill?.facts ?? "- 原文事实："}
 - 必要推导：
 - 理解用类比（还不是事实）：
 - 尚未确认：
@@ -81,7 +110,7 @@ ${formulaSection}### 1. 理解
 
 | 知识概念 | 类比元素 | 对应机制 | 适用边界 |
 | --- | --- | --- | --- |
-|  |  |  |  |
+${prefill?.mappingRows ?? "|  |  |  |  |"}
 
 ### 门禁自检
 
@@ -101,19 +130,32 @@ ${comprehensionSection}`;
 }
 
 function help(): void {
-  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。\n`);
+  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n      --source <文本或文件>  用 HanLP/本地分析预填事实骨架与知识概念列\n  -o, --output <路径>\n      --hanlp\n      --hanlp-mode <auto|restful|native|local-fallback>\n      --hanlp-url <url>\n      --hanlp-auth <key>\n      --hanlp-lang <zh|mul|en>\n      --custom-dict <path>\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。未提供 --source 时骨架与旧版一致。\n`);
 }
 
-function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean } {
+function readSource(value: string): string {
+  if (existsSync(value)) return readFileSync(value, "utf8");
+  return value;
+}
+
+function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean; sourceText?: string; outputPath?: string; hanlp: HanLPOptions } {
+  const hanlp = parseHanLPCliOptions(argv);
   let topic: string | undefined;
   let style: ExpressionStyle = "anime";
   let level: OutputLevel = "default";
   let withFormula = false;
   let intensity = "standard";
   let withComprehension = false;
+  let sourceText: string | undefined;
+  let outputPath: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    const hanlpEnd = consumeHanlpArg(argv, index);
+    if (hanlpEnd !== null) {
+      index = hanlpEnd;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       help();
       process.exit(0);
@@ -152,13 +194,46 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
       withComprehension = true;
       continue;
     }
+    if (arg === "--source") {
+      const value = argv[index + 1];
+      if (!value) usageError("--source 需要文本或文件路径");
+      sourceText = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "-o" || arg === "--output") {
+      outputPath = argv[index + 1];
+      if (!outputPath) usageError(`${arg} 需要路径`);
+      index += 1;
+      continue;
+    }
     usageError(`未知选项：${arg}`);
   }
   if (!topic) usageError("请通过 -t 或 --topic 提供主题");
-  return { topic, style, level, withFormula, intensity, withComprehension };
+  return { topic, style, level, withFormula, intensity, withComprehension, sourceText, outputPath, hanlp };
 }
 
 if (import.meta.main) {
   const args = parseArgs(Bun.argv.slice(2));
-  process.stdout.write(`${renderTemplate(args.topic, args.style, args.level, args.withFormula, args.intensity, args.withComprehension)}\n`);
+  const sourceText = args.sourceText ? readSource(args.sourceText) : undefined;
+  const write = async (): Promise<void> => {
+    const analysis = args.hanlp.enabled && sourceText ? await analyzeWithHanLP(sourceText, args.hanlp) : undefined;
+    const markdown = renderTemplate(
+      args.topic,
+      args.style,
+      args.level,
+      args.withFormula,
+      args.intensity,
+      args.withComprehension,
+      sourceText,
+      args.hanlp,
+      analysis,
+    );
+    if (args.outputPath) writeFileSync(args.outputPath, `${markdown}\n`);
+    else process.stdout.write(`${markdown}\n`);
+  };
+  write().catch((error: unknown) => {
+    process.stderr.write(`错误：${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(2);
+  });
 }

@@ -13,6 +13,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { analyzeMarkdown, readMarkdown, type FactLedger } from "./check-output";
+import { analyzeWithHanLP, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
 import { isExpressionStyle, printJson, relativeIsInside, type ExpressionStyle, usageError } from "./shared";
 
 type NavigationKind = "title" | "abstract" | "method" | "conclusion";
@@ -40,6 +41,7 @@ interface PdfEvaluatorArgs {
   renderPages?: "key" | number[];
   popplerPath?: string;
   level: "default" | "expand" | "long";
+  hanlp: HanLPOptions;
 }
 
 const SECTION_PATTERNS: Record<Exclude<NavigationKind, "title">, RegExp> = {
@@ -49,10 +51,11 @@ const SECTION_PATTERNS: Record<Exclude<NavigationKind, "title">, RegExp> = {
 };
 
 function help(): void {
-  process.stdout.write(`本地 PDF 评测准备工具（Bun/TypeScript）\n\n用法：\n  bun run evaluate-pdf -- <论文.pdf> --style war-room --workspace C:\\Temp\\conversion-eval\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --render-pages key\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --result C:\\Temp\\article.md --facts C:\\Temp\\fact-ledger.verified.json\n\n行为：\n  - 必须指定仓库外、无 .git 的空 --workspace；不会复制 PDF 或调用 Git。\n  - 生成 extraction.json、navigation.json、fact-ledger.draft.json、evaluation-manifest.json。\n  - --render-pages 时调用系统 PATH 中的 pdftoppm，或 --poppler 指定的可执行文件。\n  - 仅在传入 --result 与事实清单时写入结构评分卡；不会生成文章或自行宣布 8/8。\n\n选项：\n  --workspace <仓库外目录>\n  --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  --result <仓库外 Markdown>\n  --facts <仓库外 fact-ledger.verified.json>\n  --level <default|expand|long>\n  --render-pages <key|1,3,5>\n  --render                         兼容别名，等同于 --render-pages key\n  --poppler <pdftoppm 路径>\n`);
+  process.stdout.write(`本地 PDF 评测准备工具（Bun/TypeScript）\n\n用法：\n  bun run evaluate-pdf -- <论文.pdf> --style war-room --workspace C:\\Temp\\conversion-eval\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --render-pages key\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --result C:\\Temp\\article.md --facts C:\\Temp\\fact-ledger.verified.json\n\n行为：\n  - 必须指定仓库外、无 .git 的空 --workspace；不会复制 PDF 或调用 Git。\n  - 生成 extraction.json、navigation.json、fact-ledger.draft.json、evaluation-manifest.json。\n  - --render-pages 时调用系统 PATH 中的 pdftoppm，或 --poppler 指定的可执行文件。\n  - 仅在传入 --result 与事实清单时写入结构评分卡；不会生成文章或自行宣布 8/8。\n\n选项：\n  --workspace <仓库外目录>\n  --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  --result <仓库外 Markdown>\n  --facts <仓库外 fact-ledger.verified.json>\n  --level <default|expand|long>\n  --render-pages <key|1,3,5>\n  --render                         兼容别名，等同于 --render-pages key\n  --poppler <pdftoppm 路径>\n  --hanlp                          从导航页抽取关键词、实体和语义角色，写入草稿事实清单\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n`);
 }
 
 function parseArgs(argv: string[]): PdfEvaluatorArgs {
+  const hanlp = parseHanLPCliOptions(argv);
   let pdfPath: string | undefined;
   let workspace: string | undefined;
   let style: ExpressionStyle | undefined;
@@ -64,6 +67,11 @@ function parseArgs(argv: string[]): PdfEvaluatorArgs {
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    const hanlpEnd = consumeHanlpArg(argv, index);
+    if (hanlpEnd !== null) {
+      index = hanlpEnd;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       help();
       process.exit(0);
@@ -141,6 +149,7 @@ function parseArgs(argv: string[]): PdfEvaluatorArgs {
     renderPages,
     popplerPath: popplerPath ? resolve(popplerPath) : undefined,
     level,
+    hanlp,
   };
 }
 
@@ -247,6 +256,34 @@ function buildNavigation(pages: PageText[]): NavigationEntry[] {
   return entries.map((entry, index) => ({ ...entry, id: `N${String(index + 1).padStart(2, "0")}` }));
 }
 
+function enrichDraftWithHanlp(draft: Record<string, unknown>, analysis: HanLPDocumentAnalysis): Record<string, unknown> {
+  const facts = Array.isArray(draft.facts) ? draft.facts : [];
+  const keyphrases = analysis.keyphrases.map((item) => item.phrase);
+  draft.facts = facts.map((raw) => {
+    const fact = raw as { evidence?: string; required_terms?: string[]; mapping_terms?: string[]; claim?: string };
+    const evidence = fact.evidence ?? "";
+    const localTerms = [...new Set([...keyphrases, ...analysis.entities.map((entity) => entity.text)])]
+      .filter((term) => term.length >= 2 && evidence.includes(term))
+      .slice(0, 8);
+    const firstSentence = evidence.split(/(?<=[。！？.!?])/u)[0]?.trim() ?? "";
+    return {
+      ...fact,
+      claim: fact.claim || firstSentence,
+      required_terms: fact.required_terms?.length ? fact.required_terms : localTerms,
+      mapping_terms: fact.mapping_terms?.length ? fact.mapping_terms : localTerms,
+    };
+  });
+  draft.hanlp_auxiliary_metrics = {
+    backend: analysis.backendUsed,
+    sentence_count: analysis.sentences.length,
+    keyphrases: analysis.keyphrases,
+    entities: analysis.entities.map((entity) => ({ text: entity.text, type: entity.type })),
+    srl_frame_count: analysis.srlFrames.length,
+    avg_dep_depth: analysis.depDiagnostics.avgTreeDepth,
+  };
+  return draft;
+}
+
 function draftLedger(sourcePdf: string, navigation: NavigationEntry[]): Record<string, unknown> {
   return {
     schema_version: "1.0",
@@ -314,6 +351,10 @@ async function main(argv: string[]): Promise<void> {
   const extracted = await extractPages(args.pdfPath);
   const navigation = buildNavigation(extracted.pages);
   const draft = draftLedger(args.pdfPath, navigation);
+  if (args.hanlp.enabled) {
+    const navigationText = navigation.map((entry) => entry.evidence).join("\n");
+    enrichDraftWithHanlp(draft, await analyzeWithHanLP(navigationText, args.hanlp));
+  }
   await writeFile(join(outputDir, "extraction.json"), `${JSON.stringify({ page_count: extracted.pageCount, pages: extracted.pages }, null, 2)}\n`, "utf8");
   await writeFile(join(outputDir, "navigation.json"), `${JSON.stringify({ entries: navigation }, null, 2)}\n`, "utf8");
   await writeFile(join(outputDir, "fact-ledger.draft.json"), `${JSON.stringify(draft, null, 2)}\n`, "utf8");
@@ -328,11 +369,15 @@ async function main(argv: string[]): Promise<void> {
   let structuralCheck: ReturnType<typeof analyzeMarkdown> | undefined;
   if (args.resultPath && args.factsPath) {
     await readVerifiedLedger(args.factsPath);
-    structuralCheck = analyzeMarkdown(readMarkdown(args.resultPath), {
+    const resultText = readMarkdown(args.resultPath);
+    const precomputedStoryNlp = args.hanlp.enabled ? await analyzeWithHanLP(resultText, args.hanlp) : undefined;
+    structuralCheck = analyzeMarkdown(resultText, {
       level: args.level,
       expectedStyle: args.style,
       factsPath: args.factsPath,
       requireFacts: true,
+      hanlpOptions: args.hanlp,
+      precomputedStoryNlp,
     });
     await writeFile(join(outputDir, "scorecard.json"), `${JSON.stringify({
       structural_check: structuralCheck,
@@ -340,6 +385,7 @@ async function main(argv: string[]): Promise<void> {
         required_dimensions: ["能懂", "保真", "同构", "表达不挡懂"],
         rule: "四项均需人工或独立模型给出 2/2，才可宣称总分 8/8。结构检查 PASS 或事实 ID 覆盖 PASS 都不能代替语义质量或用户理解。",
       },
+      hanlp_auxiliary_metrics: structuralCheck.hanlp_report,
       mechanical: {
         structure_verdict: structuralCheck.structure_verdict,
         term_id_coverage_verdict: structuralCheck.term_id_coverage_verdict,

@@ -8,6 +8,7 @@
  *   bun run validate-input -- --kind academic-paper -
  */
 
+import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
 import { printJson, readStdIn, usageError } from "./shared";
 
 type ContentKind = "auto" | "text" | "academic-paper";
@@ -68,6 +69,20 @@ export interface InputAnalysis {
   content_kind: ContentKind;
   recommend_level: "简约" | "展开" | "长篇";
   recommend_action: "ask_for_input" | "explain_formula_first" | "navigate_paper" | "refuse_volume" | "refuse_length" | "proceed";
+  hanlp_enrichment?: {
+    backend: string;
+    sentence_count: number;
+    keyphrases: Array<{ phrase: string; score: number }>;
+    entities: Array<{ text: string; type: string }>;
+    srl_mechanisms: Array<{
+      trigger: string[];
+      actor: string[];
+      predicate: string;
+      target: string[];
+      constraint: string[];
+    }>;
+    avg_dep_depth: number;
+  };
 }
 
 export function isAcademicPaper(text: string, kind: ContentKind = "auto"): boolean {
@@ -76,7 +91,15 @@ export function isAcademicPaper(text: string, kind: ContentKind = "auto"): boole
   const lowered = text.toLocaleLowerCase();
   const markerCount = PAPER_MARKERS.filter((marker) => lowered.includes(marker)).length;
   const hasExplicitPaperCue = /(?:学术)?论文|paper\s+title|doi\s*[:：]/iu.test(text);
-  return markerCount >= 4 || (text.length >= 800 && markerCount >= 3) || (hasExplicitPaperCue && markerCount >= 2);
+  const zhStructureHits = [
+    /(?:^|\n)\s*摘\s*要\s*(?:[:：]|\n)/u,
+    /(?:^|\n)\s*关键词\s*[:：]/u,
+    /(?:^|\n)\s*(?:引言|绪论)/u,
+    /(?:^|\n)\s*(?:研究方法|实验与分析|模型架构)/u,
+    /(?:^|\n)\s*参考文献\s*(?:\n|$)/u,
+    /基金项目|国家自然科学基金|通讯作者/u,
+  ].filter((pattern) => pattern.test(text)).length;
+  return markerCount >= 4 || (text.length >= 800 && markerCount >= 3) || (hasExplicitPaperCue && markerCount >= 2) || zhStructureHits >= 2;
 }
 
 function hasKnowledgeSignal(text: string): boolean {
@@ -114,7 +137,28 @@ export function hasMixedContent(text: string): boolean {
   return [hasTable, hasList, hasFormulaMarker].filter(Boolean).length >= 2;
 }
 
-export function analyzeInput(text: string, kind: ContentKind = "auto"): InputAnalysis {
+function hanlpEnrichment(analysis: HanLPDocumentAnalysis): NonNullable<InputAnalysis["hanlp_enrichment"]> {
+  return {
+    backend: analysis.backendUsed,
+    sentence_count: analysis.sentences.length,
+    keyphrases: analysis.keyphrases,
+    entities: analysis.entities.map((entity) => ({ text: entity.text, type: entity.type })),
+    srl_mechanisms: analysis.srlFrames.map((frame) => ({
+      trigger: frame.triggerOrCondition,
+      actor: frame.actorArg0,
+      predicate: frame.predicate,
+      target: frame.targetArg1,
+      constraint: frame.constraintsOrManner,
+    })),
+    avg_dep_depth: analysis.depDiagnostics.avgTreeDepth,
+  };
+}
+
+export function analyzeInput(
+  text: string,
+  kind: ContentKind = "auto",
+  hanlp?: { options?: HanLPOptions; analysis?: HanLPDocumentAnalysis },
+): InputAnalysis {
   const is_empty = text.trim().length === 0;
   const is_academic_paper = isAcademicPaper(text, kind);
   const is_chitchat = isChitchat(text);
@@ -130,9 +174,13 @@ export function analyzeInput(text: string, kind: ContentKind = "auto"): InputAna
   else if (wants_longform) recommend_action = "refuse_length";
   else if (has_formula) recommend_action = "explain_formula_first";
 
+  const analysis = !is_empty && hanlp?.options?.enabled
+    ? hanlp.analysis ?? analyzeWithHanLPSync(text, hanlp.options)
+    : undefined;
+  const enrichment = analysis ? hanlpEnrichment(analysis) : undefined;
   const recommend_level: InputAnalysis["recommend_level"] = wants_longform
     ? "长篇"
-    : EXPAND_HINTS.some((hint) => text.includes(hint))
+    : EXPAND_HINTS.some((hint) => text.includes(hint)) || (enrichment !== undefined && (enrichment.avg_dep_depth >= 5 || enrichment.entities.length >= 6))
       ? "展开"
       : "简约";
 
@@ -147,18 +195,25 @@ export function analyzeInput(text: string, kind: ContentKind = "auto"): InputAna
     content_kind: kind,
     recommend_level,
     recommend_action,
+    ...(enrichment ? { hanlp_enrichment: enrichment } : {}),
   };
 }
 
 function help(): void {
-  process.stdout.write(`输入校验（Bun/TypeScript）\n\n用法：\n  bun run validate-input -- \"贝叶斯定理 P(A|B)=...\"\n  echo \"你好\" | bun run validate-input -- -\n  bun run validate-input -- --kind academic-paper -\n\n选项：\n  --kind <auto|text|academic-paper>  指定内容类型（默认 auto）\n  --paper                            等同于 --kind academic-paper\n`);
+  process.stdout.write(`输入校验（Bun/TypeScript）\n\n用法：\n  bun run validate-input -- \"贝叶斯定理 P(A|B)=...\"\n  echo \"你好\" | bun run validate-input -- -\n  bun run validate-input -- --kind academic-paper -\n\n选项：\n  --kind <auto|text|academic-paper>  指定内容类型（默认 auto）\n  --paper                            等同于 --kind academic-paper\n  --hanlp                            附加本地或 HanLP 术语、语义角色与句法深度\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp                         关闭环境变量 HANLP_ENABLED\n`);
 }
 
 async function main(argv: string[]): Promise<void> {
+  const hanlpOptions = parseHanLPCliOptions(argv);
   let kind: ContentKind = "auto";
   let positional: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    const hanlpEnd = consumeHanlpArg(argv, index);
+    if (hanlpEnd !== null) {
+      index = hanlpEnd;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       help();
       return;
@@ -181,7 +236,8 @@ async function main(argv: string[]): Promise<void> {
     positional = arg;
   }
   const text = positional === undefined || positional === "-" ? await readStdIn() : positional;
-  printJson(analyzeInput(text, kind));
+  const analysis = hanlpOptions.enabled ? await analyzeWithHanLP(text, hanlpOptions) : undefined;
+  printJson(analyzeInput(text, kind, { options: hanlpOptions, analysis }));
 }
 
 if (import.meta.main) {
