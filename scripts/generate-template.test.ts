@@ -23,6 +23,23 @@ describe("generate-template", () => {
     }
   });
 
+  test("default skeleton does not emit long-form chunk anchors", () => {
+    const markdown = renderTemplate("快速排序", "anime", "default", false);
+    expect(markdown).not.toContain("CHUNK_ANCHOR");
+    expect(markdown).not.toContain("## 第 1 节");
+  });
+
+  test("long skeleton emits four chunk anchors unless a count is given", () => {
+    const markdown = renderTemplate("技能", "anime", "long", false);
+    expect(markdown).toContain("> 表达强度：`standard`");
+    expect(markdown).toContain("## 第 1 节：痛点切入与初始状态");
+    expect(markdown).toContain("<!-- [CHUNK_ANCHOR_4]");
+    expect(markdown).not.toContain("CHUNK_ANCHOR_5");
+    const three = renderTemplate("技能", "anime", "long", false, "standard", false, undefined, undefined, undefined, 3);
+    expect(three).toContain("<!-- [CHUNK_ANCHOR_3]");
+    expect(three).not.toContain("CHUNK_ANCHOR_4");
+  });
+
   test("comprehension section is opt-in", () => {
     const markdown = renderTemplate("CAP", "war-room", "default", false, "standard", true);
     expect(markdown).toContain("## 理解检验");

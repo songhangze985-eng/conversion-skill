@@ -37,6 +37,22 @@ export function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => sortJsonValue(item));
+  if (value && typeof value === "object") {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = sortJsonValue((value as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+export function stableJson(value: unknown): string {
+  return `${JSON.stringify(sortJsonValue(value), null, 2)}\n`;
+}
+
 export async function readStdIn(): Promise<string> {
   return new Response(Bun.stdin.stream()).text();
 }

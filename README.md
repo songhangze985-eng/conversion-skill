@@ -6,7 +6,7 @@ English: Mechanism Explainer — explain complex mechanisms through natural intu
 
 很多解释之所以让人看不懂，要么是因为「用术语解释术语」，要么是因为「硬套一层尴尬的故事外皮（比如把术语直接音译成人名去报幕）」。`conversion-skill` 采用**「先抓认知卡点 → 再搭同构场景 → 自然叙事展开 → 严谨事实校验」**的转化思路，支持轻快叙事（默认）、侦探推理、项目战情室、自然纪录片、记叙文、播客对谈、现代短诗与中性直述。
 
-核心能力完全由纯 Markdown 驱动，日常使用无需安装 Bun、TypeScript 或 Python。当前 Skill 版本是 `2.3.1`。可选脚本可以接上 [HanLP](https://github.com/hankcs/HanLP) 做术语、语义角色和可读性辅助；不传 `--hanlp` 时，这些脚本仍走原来的本地规则，也不会访问网络。
+核心能力完全由纯 Markdown 驱动，日常使用无需安装 Bun、TypeScript 或 Python。当前 Skill 版本是 `2.4.0`。可选脚本可以接上 [HanLP](https://github.com/hankcs/HanLP) 做术语、语义角色和可读性辅助；不传 `--hanlp` 时，这些脚本仍走原来的本地规则，也不会访问网络。
 
 ```bash
 npx skills add songhangze985-eng/conversion-skill
@@ -128,8 +128,9 @@ bun run check-output -- evals/fixtures/ok-four-col.md --style detective --hanlp
 打开辅助之后，各脚本额外做这些事：
 
 - `validate-input` 在原有分流之外，附加句子数、关键短语、实体、语义角色链和句法深度。
-- `generate-template` 用 `--source` 预填事实骨架和映射表的「知识概念」列。不传 `--source` 时，骨架与原来一致。
-- `check-output` 附加可读性分数、过深长句、未在映射表铺垫的术语，以及人味诊断（单句成段率、非人名「·」、列表占比、句长节奏、套话）。机械结论字段保持不变；只有打开 `--hanlp` 时，语义质量才会标成 `HANLP_ASSISTED_PASS` 或 `HANLP_ASSISTED_WARN`。再加上 `--strict-human-voice` 后，单句成段率超过 35%、非人名「·」达到 2 处，或人味分数低于 70，总结论改为 `FAIL`。`--baseline-floor` 再用段落、圆点、因果链、映射边界和校验字数做最低表达水平线。`--fix` 会在落盘前去掉套话前缀和行首圆点，并合并过短段落。这仍然不是「读者已经听懂」的证明。本地兜底的可读性分数会标明 `local_heuristic_estimate`，和 HanLP 依存分析不是同一件事。
+- `generate-template` 用 `--source` 预填事实骨架和映射表的「知识概念」列。不传 `--source` 时，骨架与原来一致。`--level long --chunks <N>` 把正文拆成至少 3 节、默认 4 节，每节标题下留一行局部约束注释，目标 600–800 字。`default` 和 `expand` 的骨架不变。
+- `check-output` 附加可读性分数、过深长句、未在映射表铺垫的术语，以及人味诊断（单句成段率、非人名「·」、列表占比、句长节奏、套话）。机械结论字段保持不变；只有打开 `--hanlp` 时，语义质量才会标成 `HANLP_ASSISTED_PASS` 或 `HANLP_ASSISTED_WARN`。再加上 `--strict-human-voice` 后，单句成段率超过 35%、非人名「·」达到 2 处，或人味分数低于 70，总结论改为 `FAIL`。`--baseline-floor` 再用段落、圆点、因果链、映射边界和校验字数做最低表达水平线。`--chunk <k|all>` 对每个二级标题单独验收，任一块失败则总结论为 `FAIL`；不传 `--chunk` 时，原有结论不变。`--deterministic` 把人类可读结果收成一行，JSON 键序固定。`--fix` 会在落盘前去掉套话前缀和行首圆点，并合并过短段落。这仍然不是「读者已经听懂」的证明。本地兜底的可读性分数会标明 `local_heuristic_estimate`，和 HanLP 依存分析不是同一件事。
+- `evaluate-pdf --deterministic` 的清单里不再写入耗时。
 - `evaluate-pdf --hanlp` 把导航页里抽出的术语写进 `fact-ledger.draft.json`。这份清单仍是草稿，核验前不能当作已确认事实。
 
 领域词可以放进 JSON，并用 `--custom-dict` 传入。示例见 [assets/custom-dict.example.json](assets/custom-dict.example.json)，里面有 `force`、`combine` 和白话同义词。`--sts-threshold`、`--max-dep-depth` 只在 `check-output --hanlp` 时参与语义相似度和长句预警。

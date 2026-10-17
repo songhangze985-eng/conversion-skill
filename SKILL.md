@@ -5,7 +5,7 @@ license: MIT
 compatibility: "The Markdown skill is host-agnostic and has no runtime dependency. Optional local validation, evaluation, and HanLP NLP helper scripts support Bun/Node and optional HanLP RESTful/Native backends."
 metadata:
   author: songhangze985-eng
-  version: "2.3.1"
+  version: "2.4.0"
 ---
 
 # conversion-skill
@@ -25,6 +25,21 @@ metadata:
 5. 连续无标点不超过 38 字。知识点校验至少 45 字。专业词要先在场景或映射里出现。`--fix` 会去掉套话前缀和行首圆点，并把过短的相邻句合成自然段。
 
 在工程辅助层，本项目支持以 [HanLP](https://github.com/hankcs/HanLP)（RESTful API 或本地 Native API）作为可选 NLP 辅助引擎，在不改变零依赖 Markdown 核心流程与现有全部 CLI 选项的前提下，增强中文与多语种分词（`tok`）、命名实体与术语识别（`ner`）、语义角色标注（`srl`）、依存句法复杂度检测（`dep`）、语义文本相似度核验（`sts`）、关键短语抽取（`keyphrase`）以及针对 Issue #1 的「去 AI 厕纸感（反一行一句 / 反 `·` 分点 / 人味节奏）」量化检测。
+
+## 3000 字以上的分块门禁
+
+目标达到或超过 2500 字（`--level long`）时，不要一次写完全文。后半篇容易滑成一行一句，全文平均分也会把这一截盖住。
+
+1. 先运行 `bun run generate-template -- -t "<主题>" -l long --chunks <N>`。全文拆成幕后映射，外加 N 个独立小节，每节 600–800 字。N 默认 4，至少 3。
+2. 每个 `## 第 k 节` 标题下保留 `<!-- [CHUNK_ANCHOR_k] ... -->`。这行只给写作者看，不进入读者正文，计分前会去掉。
+3. 每写完一节就运行 `bun run check-output -- <result.md> --chunk <k> --baseline-floor --deterministic`。当前节通过后再写下一块。失败时只改这一节，不重写已经通过的前几节。
+
+## 缓存优先执行
+
+1. 同一轮按文件名排序读取要用的参考。已经读过、且没有改过的文件不要再读一遍。
+2. 列表和查找结果要排序。需要稳定输出时给脚本加 `--deterministic`。大型提取先看规模，不要把整份 JSON 打进对话。
+3. 用状态标记推进：`[MODE: PLAN]`、`[MODE: EXECUTE_CHUNK_k]`、`[MODE: VERIFY_CHUNK_k]`。套话剥离和碎段合并交给 `check-output --fix`。
+4. 依赖已经读过的材料来写分块时，留在当前会话里做。只有一次性的超长日志才拆出去。
 
 ## 何时触发 (When to Use)
 
@@ -58,9 +73,9 @@ metadata:
 | 用户明确要求长篇展开 | `references/long-article-engine.md` |
 | 内部完整稿排版骨架 | `assets/templates/article-output-template.md` |
 | 交稿呈现规则 (默认折叠) | `references/folded-presentation.md` |
-| 生成空白或 HanLP 智能预填骨架 (可选 Bun) | `bun run generate-template -- -t "<知识点>" -s <style> -l <default\|expand\|long> [--source <文本或文件>] [--hanlp]` |
+| 生成空白或 HanLP 智能预填骨架 (可选 Bun) | `bun run generate-template -- -t "<知识点>" -s <style> -l <default\|expand\|long> [--chunks <N>] [--source <文本或文件>] [--hanlp]` |
 | 输入分流与 HanLP 术语/机制预分析 (可选 Bun) | `bun run validate-input -- "<输入>" [--paper] [--kind <auto\|text\|academic-paper>] [--hanlp]` |
-| 交稿前机械与 HanLP 语义/可读性/人味自检 (可选 Bun) | `bun run check-output -- <result.md> --level <default\|expand\|long> --style <style> [--facts <路径>] [--hanlp] [--strict-human-voice]` |
+| 交稿前机械与 HanLP 语义/可读性/人味自检 (可选 Bun) | `bun run check-output -- <result.md> --level <default\|expand\|long> --style <style> [--facts <路径>] [--hanlp] [--strict-human-voice] [--baseline-floor] [--chunk <k\|all>] [--deterministic]` |
 | PDF 论文导航、HanLP 事实抽取与评分卡 (可选 Bun) | `bun run evaluate-pdf -- <input.pdf> --workspace <dir> --style <style> [--result <md>] [--facts <json>] [--hanlp]` |
 
 ## 转化工作流 (五步法)
