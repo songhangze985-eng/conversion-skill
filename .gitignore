@@ -15,6 +15,10 @@ build/
 __pycache__/
 *.py[cod]
 
+# 不进入公开仓库的代笔草稿
+docs/issue-1-reply-draft.md
+docs/owner-manual-steps.md
+
 # 测试临时文件（PDF 评测工具还会拒绝将产物写入仓库）
 test_result.md
 pass_test.md

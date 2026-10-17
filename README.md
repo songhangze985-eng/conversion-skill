@@ -6,7 +6,7 @@ English: Mechanism Explainer — explain complex mechanisms through natural intu
 
 很多解释之所以让人看不懂，要么是因为「用术语解释术语」，要么是因为「硬套一层尴尬的故事外皮（比如把术语直接音译成人名去报幕）」。`conversion-skill` 采用**「先抓认知卡点 → 再搭同构场景 → 自然叙事展开 → 严谨事实校验」**的转化思路，支持轻快叙事（默认）、侦探推理、项目战情室、自然纪录片、记叙文、播客对谈、现代短诗与中性直述。
 
-核心能力完全由纯 Markdown 驱动，日常使用无需安装 Bun、TypeScript 或 Python。
+核心能力完全由纯 Markdown 驱动，日常使用无需安装 Bun、TypeScript 或 Python。当前 Skill 版本是 `2.3.0`。可选脚本可以接上 [HanLP](https://github.com/hankcs/HanLP) 做术语、语义角色和可读性辅助；不传 `--hanlp` 时，这些脚本仍走原来的本地规则，也不会访问网络。
 
 ```bash
 npx skills add songhangze985-eng/conversion-skill
@@ -96,7 +96,7 @@ Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.agents\skills\conversion-
 
 ## 可选本地校验工具（Bun）
 
-仓库 `scripts/` 目录下提供了用于本地结构检查与评测的 TypeScript 工具（日常对话无需运行）：
+仓库 `scripts/` 目录下提供了用于本地结构检查与评测的 TypeScript 工具。日常对话不用运行它们。
 
 ```bash
 bun install
@@ -104,7 +104,35 @@ bun test scripts
 bun run validate-input -- "贝叶斯定理 P(A|B)=P(B|A)P(A)/P(B)"
 bun run generate-template -- -t "快速排序" -s detective --with-comprehension
 bun run check-output -- evals/fixtures/ok-four-col.md --style detective
+bun run evaluate-pdf -- paper.pdf --style detective --workspace /tmp/conversion-eval
 ```
+
+`evaluate-pdf` 只在仓库外的临时目录里准备论文导航和事实草稿，不会生成解释正文，也不会把产物写进仓库。
+
+### 可选 HanLP 辅助
+
+`--hanlp` 才启用辅助分析。它按这个顺序尝试：
+
+1. `native`：本机 Python 包 `hanlp`，经 `scripts/hanlp_bridge.py` 调用。仓库不附带这个包。
+2. `restful`：请求 HanLP HTTP 接口，默认 `https://www.hanlp.com/api`。地址和密钥可用 `--hanlp-url`、`--hanlp-auth`，或环境变量 `HANLP_API_URL`、`HANLP_AUTH`。
+3. `local-fallback`：接口和本地模型都不可用时，用仓库内的分词、术语和句法估算继续跑完。
+
+可用 `--hanlp-mode restful|native|local-fallback` 指定一层。`HANLP_ENABLED=1` 等同于打开 `--hanlp`；`--no-hanlp` 可以关掉它。
+
+```bash
+bun run validate-input -- "快速排序每次选一个基准值。" --hanlp --hanlp-mode local-fallback
+bun run generate-template -- -t "快速排序" --source "选一个基准，小的放左，大的放右，再递归。" --hanlp
+bun run check-output -- evals/fixtures/ok-four-col.md --style detective --hanlp
+```
+
+打开辅助之后，各脚本额外做这些事：
+
+- `validate-input` 在原有分流之外，附加句子数、关键短语、实体、语义角色链和句法深度。
+- `generate-template` 用 `--source` 预填事实骨架和映射表的「知识概念」列。不传 `--source` 时，骨架与原来一致。
+- `check-output` 附加可读性分数、过深长句、未在映射表铺垫的术语，以及人味诊断（单句成段率、非人名「·」、列表占比、句长节奏、套话）。机械结论字段保持不变；只有打开 `--hanlp` 时，语义质量才会标成 `HANLP_ASSISTED_PASS` 或 `HANLP_ASSISTED_WARN`。再加上 `--strict-human-voice` 后，单句成段率超过 35%、非人名「·」达到 2 处，或人味分数低于 70，总结论改为 `FAIL`。这仍然不是「读者已经听懂」的证明。
+- `evaluate-pdf --hanlp` 把导航页里抽出的术语写进 `fact-ledger.draft.json`。这份清单仍是草稿，核验前不能当作已确认事实。
+
+领域词可以放进 JSON，并用 `--custom-dict` 传入。示例见 [assets/custom-dict.example.json](assets/custom-dict.example.json)，里面有 `force`、`combine` 和白话同义词。`--sts-threshold`、`--max-dep-depth` 只在 `check-output --hanlp` 时参与语义相似度和长句预警。
 
 ## 许可
 

@@ -58,6 +58,19 @@ export interface HanLPDepDiagnostics {
   }>;
 }
 
+export interface HumanVoiceDiagnostics {
+  paragraphCount: number;
+  singleSentenceParagraphCount: number;
+  singleSentenceParagraphRatio: number;
+  nonEntityMiddleDotCount: number;
+  bulletLineCount: number;
+  bulletLineRatio: number;
+  sentenceLengthCv: number;
+  aiClichesFound: string[];
+  humanVoiceScore: number;
+  issue1Warnings: string[];
+}
+
 export interface HanLPDocumentAnalysis {
   backendUsed: HanLPBackendMode;
   sentences: string[];
@@ -85,6 +98,24 @@ const STOPWORDS_ZH = new Set([
   "或", "等", "中", "对", "为", "以", "将", "通过", "进行", "可以", "如果", "因为", "所以", "但是",
   "或者", "以及", "这个", "那个", "什么", "怎么", "如何", "我们", "他们", "它们"
 ]);
+
+const AI_CLICHE_PHRASES = [
+  "总而言之",
+  "综上所述",
+  "值得注意的是",
+  "需要指出的是",
+  "不言而喻",
+  "众所周知",
+  "让我们来看看",
+  "想象一下",
+  "简单来说",
+  "换句话说",
+  "不仅仅",
+  "赋能",
+  "抓手",
+  "底层逻辑",
+  "生态闭环",
+];
 
 const STOPWORDS_EN = new Set([
   "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -204,6 +235,95 @@ export function segmentTextLocal(text: string, customDict?: CustomDictionary): s
 
   const matches = working.match(/__HANLP_TERM_\d+__|[A-Za-z0-9_+-]+|[\u4e00-\u9fff]{1,4}|[^\s]/g) ?? [];
   return matches.map((m) => placeholders.get(m) ?? m);
+}
+
+export function evaluateHumanVoiceAndAntiSlop(
+  bodyText: string,
+  nlp: HanLPDocumentAnalysis,
+  style = "anime",
+): HumanVoiceDiagnostics {
+  const rawLines = bodyText
+    .replace(/```[\s\S]*?```/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^#{1,6}\s/.test(line) && !/^\|.*\|$/.test(line));
+  const paragraphs = bodyText
+    .replace(/```[\s\S]*?```/g, "")
+    .split(/\r?\n\s*\r?\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0 && !/^#{1,6}\s/.test(paragraph) && !/^\|.*\|$/.test(paragraph));
+  const bulletRegex = /^(?:[-*+•·]|\d+[.)、])\s+/;
+  const bulletLineCount = rawLines.filter((line) => bulletRegex.test(line)).length;
+  const bulletLineRatio = rawLines.length > 0 ? Number((bulletLineCount / rawLines.length).toFixed(3)) : 0;
+
+  let singleSentenceParagraphCount = 0;
+  for (const paragraph of paragraphs) {
+    if (bulletRegex.test(paragraph)) continue;
+    const sentences = paragraph.split(/(?<=[。！？!?]|\.\s+)/g).map((sentence) => sentence.trim()).filter(Boolean);
+    if (sentences.length <= 1 && paragraph.length < 45) singleSentenceParagraphCount += 1;
+  }
+  const singleSentenceParagraphRatio = paragraphs.length > 0
+    ? Number((singleSentenceParagraphCount / paragraphs.length).toFixed(3))
+    : 0;
+
+  const personEntities = new Set(
+    nlp.entities.filter((entity) => ["PERSON", "PER", "NR", "nr"].includes(entity.type)).map((entity) => entity.text),
+  );
+  let maskedForDots = bodyText;
+  for (const person of personEntities) {
+    if (person.includes("·")) maskedForDots = maskedForDots.split(person).join("");
+  }
+  const nonEntityMiddleDotCount = (maskedForDots.match(/[·•]/g) ?? []).length;
+
+  const sentLengths = nlp.tokensFine
+    .map((tokens) => tokens.filter((token) => !/^[\p{P}\s]+$/u.test(token)).length)
+    .filter((length) => length > 0);
+  let sentenceLengthCv = 0.45;
+  if (sentLengths.length >= 3) {
+    const mean = sentLengths.reduce((sum, length) => sum + length, 0) / sentLengths.length;
+    const variance = sentLengths.reduce((sum, length) => sum + (length - mean) ** 2, 0) / sentLengths.length;
+    sentenceLengthCv = mean > 0 ? Number((Math.sqrt(variance) / mean).toFixed(3)) : 0;
+  }
+
+  const aiClichesFound = AI_CLICHE_PHRASES.filter((phrase) => bodyText.includes(phrase));
+  const issue1Warnings: string[] = [];
+  const isVerse = style === "verse";
+  const isNeutral = style === "neutral";
+  if (!isVerse && paragraphs.length >= 3 && singleSentenceParagraphRatio > 0.35) {
+    issue1Warnings.push(`[Issue #1 人味门禁·一行一句预警] 单句成段（短碎段落）占比过高 (${Math.round(singleSentenceParagraphRatio * 100)}%)，读感接近 AI 快餐文；请将因果相连的句子合并为 2-5 句的自然段。`);
+  }
+  if (nonEntityMiddleDotCount >= 2) {
+    issue1Warnings.push(`[Issue #1 人味门禁·「·」号滥用预警] 检测到 ${nonEntityMiddleDotCount} 处非人名实体的居中圆点「·/•」，请移除机械分点或「概念·标签」式生造词，改为自然句子衔接。`);
+  }
+  if (!isNeutral && bulletLineRatio > 0.2) {
+    issue1Warnings.push(`[Issue #1 人味门禁·清单化正文预警] 叙事正文中列表行占比达 ${Math.round(bulletLineRatio * 100)}%，请勿把故事正文写成说明书清单。`);
+  }
+  if (!isVerse && sentLengths.length >= 4 && sentenceLengthCv < 0.22) {
+    issue1Warnings.push(`[Issue #1 人味门禁·句式节奏预警] 句子长度变异系数偏低 (CV=${sentenceLengthCv})，句式长短过于均一呆板，建议增加长短句交错的呼吸感。`);
+  }
+  if (aiClichesFound.length > 0) {
+    issue1Warnings.push(`[Issue #1 人味门禁·AI 套话预警] 检测到高频 AI 模板套话: ${aiClichesFound.join("、")}，建议直接用具体情境和动作替代。`);
+  }
+
+  const singleLinePenalty = !isVerse && paragraphs.length >= 3 ? Math.max(0, (singleSentenceParagraphRatio - 0.25) * 45) : 0;
+  const dotPenalty = Math.min(25, nonEntityMiddleDotCount * 6);
+  const bulletPenalty = !isNeutral ? Math.max(0, (bulletLineRatio - 0.1) * 40) : 0;
+  const rhythmPenalty = !isVerse && sentLengths.length >= 4 && sentenceLengthCv < 0.25 ? 10 : 0;
+  const clichePenalty = Math.min(20, aiClichesFound.length * 5);
+  const humanVoiceScore = Math.max(0, Math.min(100, Math.round(100 - singleLinePenalty - dotPenalty - bulletPenalty - rhythmPenalty - clichePenalty)));
+
+  return {
+    paragraphCount: paragraphs.length,
+    singleSentenceParagraphCount,
+    singleSentenceParagraphRatio,
+    nonEntityMiddleDotCount,
+    bulletLineCount,
+    bulletLineRatio,
+    sentenceLengthCv,
+    aiClichesFound,
+    humanVoiceScore,
+    issue1Warnings,
+  };
 }
 
 function computeDepTreeDepth(depRelations: Array<[number, string]>): number {

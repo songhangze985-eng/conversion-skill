@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, loadCustomDictionary, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
+import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, evaluateHumanVoiceAndAntiSlop, loadCustomDictionary, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions, type HumanVoiceDiagnostics } from "./hanlp-helper";
 import {
   EXPRESSION_STYLES,
   LEVEL_LIMITS,
@@ -94,6 +94,7 @@ export interface OutputCheckOptions {
   hanlpOptions?: HanLPOptions;
   stsThreshold?: number;
   maxDepDepth?: number;
+  strictHumanVoice?: boolean;
   precomputedStoryNlp?: HanLPDocumentAnalysis;
 }
 
@@ -106,6 +107,7 @@ export interface HanLPQualityReport {
   unexplained_jargon: string[];
   fact_semantic_scores: Array<{ fact_id: string; claim_similarity: number; matched_semantically: boolean }>;
   lao_yu_readability_score: number;
+  human_voice_diagnostics: HumanVoiceDiagnostics;
 }
 
 export interface OutputCheckResult {
@@ -390,6 +392,7 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const voice_leaks = VOICE_LEAKS.filter((phrase) => normalizedContains(`${storyBody(markdown)}\n${verificationText(markdown)}`, phrase));
   const ledger = loadFactLedger(options.factsPath, mapping, Boolean(options.requireFacts));
   const hanlpEnabled = Boolean(options.hanlpOptions?.enabled || options.precomputedStoryNlp);
+  const voiceRequested = Boolean(options.strictHumanVoice || hanlpEnabled);
   const stsThreshold = options.stsThreshold ?? 0.62;
   const coverage = factCoverage(
     markdown,
@@ -405,9 +408,11 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const comprehension_verdict: ComprehensionVerdict = has_comprehension_section
     ? "STRUCTURE_PRESENT_NEEDS_REVIEW"
     : "NOT_REQUESTED";
-  const verdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
-  const hanlp_report = hanlpEnabled ? buildHanlpReport(markdown, options, ledger, stsThreshold) : undefined;
-  const semantic_quality_verdict: ReviewVerdict = !hanlp_report
+  const mechanicalVerdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
+  const hanlp_report = voiceRequested ? buildHanlpReport(markdown, options, ledger, stsThreshold, style) : undefined;
+  const humanVoiceFail = Boolean(options.strictHumanVoice && hanlp_report && humanVoiceBlocks(hanlp_report.human_voice_diagnostics, style));
+  const verdict = mechanicalVerdict === "PASS" && !humanVoiceFail ? "PASS" : "FAIL";
+  const semantic_quality_verdict: ReviewVerdict = !hanlpEnabled || !hanlp_report
     ? "NEEDS_REVIEW"
     : hanlp_report.lao_yu_readability_score >= 75 && term_id_coverage_verdict === "PASS"
       ? "HANLP_ASSISTED_PASS"
@@ -447,11 +452,17 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   };
 }
 
+function humanVoiceBlocks(diagnostics: HumanVoiceDiagnostics, style: string | null): boolean {
+  const fragmented = style !== "verse" && diagnostics.paragraphCount >= 3 && diagnostics.singleSentenceParagraphRatio > 0.35;
+  return fragmented || diagnostics.nonEntityMiddleDotCount >= 2 || diagnostics.humanVoiceScore < 70;
+}
+
 function buildHanlpReport(
   markdown: string,
   options: OutputCheckOptions,
   ledger: LoadedLedger,
   stsThreshold: number,
+  style: string | null,
 ): HanLPQualityReport {
   const body = storyBody(markdown);
   const nlp = options.precomputedStoryNlp ?? analyzeWithHanLPSync(body || markdown, options.hanlpOptions);
@@ -481,6 +492,7 @@ function buildHanlpReport(
     unexplained_jargon: unexplained,
     fact_semantic_scores,
     lao_yu_readability_score: Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty - jargonPenalty))),
+    human_voice_diagnostics: evaluateHumanVoiceAndAntiSlop(body, nlp, style ?? options.expectedStyle ?? "anime"),
   };
 }
 
@@ -518,7 +530,8 @@ function render(result: OutputCheckResult): string {
     `  用户理解验证: ${reviewLabel(result.comprehension_verdict)}`,
   ];
   if (result.hanlp_report) {
-    lines.push(`  HanLP 辅助: ${result.hanlp_report.backend}，老妪能解可读性 ${result.hanlp_report.lao_yu_readability_score}`);
+    lines.push(`  HanLP 辅助: ${result.hanlp_report.backend}，老妪能解可读性 ${result.hanlp_report.lao_yu_readability_score}，人味 ${result.hanlp_report.human_voice_diagnostics.humanVoiceScore}`);
+    for (const warning of result.hanlp_report.human_voice_diagnostics.issue1Warnings) lines.push(`    ${warning}`);
     if (result.hanlp_report.unexplained_jargon.length > 0) {
       lines.push(`    未铺垫术语: ${result.hanlp_report.unexplained_jargon.slice(0, 5).join("、")}`);
     }
@@ -531,10 +544,10 @@ function render(result: OutputCheckResult): string {
 }
 
 function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语和语义相似度；不改变机械 verdict 的字段\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
 }
 
-function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number } {
+function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean } {
   const hanlp = parseHanLPCliOptions(argv);
   let file: string | undefined;
   let level: OutputLevel = "default";
@@ -544,6 +557,7 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
   let json = false;
   let stsThreshold: number | undefined;
   let maxDepDepth: number | undefined;
+  let strictHumanVoice = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -590,6 +604,10 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
       index += 1;
       continue;
     }
+    if (arg === "--strict-human-voice") {
+      strictHumanVoice = true;
+      continue;
+    }
     if (arg === "--max-dep-depth") {
       const value = Number(argv[index + 1]);
       if (!Number.isInteger(value) || value < 1) usageError("--max-dep-depth 需要正整数");
@@ -609,7 +627,7 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
     file = arg;
   }
   if (!file) usageError("请提供 Markdown 路径");
-  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth };
+  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice };
 }
 
 if (import.meta.main) {
@@ -625,6 +643,7 @@ if (import.meta.main) {
       hanlpOptions: args.hanlp,
       stsThreshold: args.stsThreshold,
       maxDepDepth: args.maxDepDepth,
+      strictHumanVoice: args.strictHumanVoice,
       precomputedStoryNlp,
     });
     if (args.json) printJson(result);
