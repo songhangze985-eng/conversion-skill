@@ -19,7 +19,7 @@ const STYLE_DESCRIPTIONS: Record<ExpressionStyle, string> = {
 const LEVEL_DESCRIPTIONS: Record<OutputLevel, string> = {
   default: "默认：正文不超过 800 字。",
   expand: "展开：正文 800-2500 字。",
-  long: "长篇：只在用户明确要求时使用。",
+  long: "长篇：按 600-800 字分块追加，禁止一次直出 3000 字。",
 };
 
 const LEGACY_STYLE_ALIASES: Record<string, { style: ExpressionStyle; intensity: string }> = {
@@ -51,6 +51,22 @@ function prefillFromSource(sourceText: string, hanlpOptions?: HanLPOptions, anal
   };
 }
 
+export function renderChunkScaffold(style: ExpressionStyle, chunkCount: number): string {
+  const count = Math.max(3, chunkCount);
+  return Array.from({ length: count }, (_, idx) => {
+    const k = idx + 1;
+    const stageLabel = k === 1
+      ? "痛点切入与初始状态"
+      : k === count
+        ? "约束、类比边界与结果"
+        : `核心机制第 ${k - 1} 环`;
+    return `## 第 ${k} 节：${stageLabel}
+<!-- [CHUNK_ANCHOR_${k}] 绑定事实: FACT-00${k} | 篇幅: 600-800字 | 硬性底线: 2-4句饱满自然段、禁一行一句、禁非人名「·」分点、禁报幕套话 -->
+
+（在此处紧贴上方锚点撰写第 ${k} 节 ${style} 风格正文，控制在 600-800 字。）`;
+  }).join("\n\n");
+}
+
 export function renderTemplate(
   topic: string,
   style: ExpressionStyle,
@@ -61,6 +77,7 @@ export function renderTemplate(
   sourceText?: string,
   hanlpOptions?: HanLPOptions,
   analysis?: HanLPDocumentAnalysis,
+  chunkCount?: number,
 ): string {
   const prefill = sourceText?.trim() ? prefillFromSource(sourceText, hanlpOptions, analysis) : undefined;
   const formulaSection = withFormula
@@ -81,6 +98,10 @@ export function renderTemplate(
 
 <!-- 可选。默认不要强制出题。用户说不要理解检验时删除本段。 -->`
     : "";
+
+  const bodyScaffold = level === "long"
+    ? renderChunkScaffold(style, chunkCount ?? 4)
+    : `<!-- ${STYLE_DESCRIPTIONS[style]} ${LEVEL_DESCRIPTIONS[level]} -->`;
 
   return `# ${topic}
 
@@ -123,7 +144,7 @@ ${prefill?.mappingRows ?? "|  |  |  |  |"}
 
 ## 正文
 
-<!-- ${STYLE_DESCRIPTIONS[style]} ${LEVEL_DESCRIPTIONS[level]} -->
+${bodyScaffold}
 
 ## 知识点校验
 
@@ -132,7 +153,7 @@ ${comprehensionSection}`;
 }
 
 function help(): void {
-  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n      --source <文本或文件>  用 HanLP/本地分析预填事实骨架与知识概念列\n  -o, --output <路径>\n      --hanlp\n      --hanlp-mode <auto|restful|native|local-fallback>\n      --hanlp-url <url>\n      --hanlp-auth <key>\n      --hanlp-lang <zh|mul|en>\n      --custom-dict <path>\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。未提供 --source 时骨架与旧版一致。\n`);
+  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n      --chunks <N>           仅 long：独立机制分块数，至少 3，默认 4\n      --source <文本或文件>  用 HanLP/本地分析预填事实骨架与知识概念列\n  -o, --output <路径>\n      --hanlp\n      --hanlp-mode <auto|restful|native|local-fallback>\n      --hanlp-url <url>\n      --hanlp-auth <key>\n      --hanlp-lang <zh|mul|en>\n      --custom-dict <path>\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。未提供 --source 时骨架与旧版一致。\n`);
 }
 
 function readSource(value: string): string {
@@ -140,7 +161,7 @@ function readSource(value: string): string {
   return value;
 }
 
-function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean; sourceText?: string; outputPath?: string; hanlp: HanLPOptions } {
+function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean; sourceText?: string; outputPath?: string; chunkCount?: number; hanlp: HanLPOptions } {
   const hanlp = parseHanLPCliOptions(argv);
   let topic: string | undefined;
   let style: ExpressionStyle = "anime";
@@ -150,6 +171,7 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
   let withComprehension = false;
   let sourceText: string | undefined;
   let outputPath: string | undefined;
+  let chunkCount: number | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -188,6 +210,13 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
       index += 1;
       continue;
     }
+    if (arg === "--chunks") {
+      const value = Number(argv[index + 1]);
+      if (!Number.isInteger(value) || value < 3) usageError("--chunks 需要不小于 3 的整数");
+      chunkCount = value;
+      index += 1;
+      continue;
+    }
     if (arg === "--with-formula") {
       withFormula = true;
       continue;
@@ -212,7 +241,7 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
     usageError(`未知选项：${arg}`);
   }
   if (!topic) usageError("请通过 -t 或 --topic 提供主题");
-  return { topic, style, level, withFormula, intensity, withComprehension, sourceText, outputPath, hanlp };
+  return { topic, style, level, withFormula, intensity, withComprehension, sourceText, outputPath, chunkCount, hanlp };
 }
 
 if (import.meta.main) {
@@ -230,6 +259,7 @@ if (import.meta.main) {
       sourceText,
       args.hanlp,
       analysis,
+      args.chunkCount,
     );
     if (args.outputPath) writeFileSync(args.outputPath, `${markdown}\n`);
     else process.stdout.write(`${markdown}\n`);

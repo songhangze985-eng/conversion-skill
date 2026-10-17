@@ -14,7 +14,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { analyzeMarkdown, readMarkdown, type FactLedger } from "./check-output";
 import { analyzeWithHanLP, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
-import { isExpressionStyle, printJson, relativeIsInside, type ExpressionStyle, usageError } from "./shared";
+import { isExpressionStyle, relativeIsInside, stableJson, type ExpressionStyle, usageError } from "./shared";
 
 type NavigationKind = "title" | "abstract" | "results" | "method" | "conclusion";
 
@@ -42,6 +42,7 @@ interface PdfEvaluatorArgs {
   popplerPath?: string;
   level: "default" | "expand" | "long";
   hanlp: HanLPOptions;
+  deterministic: boolean;
 }
 
 const SECTION_PATTERNS: Record<Exclude<NavigationKind, "title">, RegExp> = {
@@ -52,7 +53,7 @@ const SECTION_PATTERNS: Record<Exclude<NavigationKind, "title">, RegExp> = {
 };
 
 function help(): void {
-  process.stdout.write(`本地 PDF 评测准备工具（Bun/TypeScript）\n\n用法：\n  bun run evaluate-pdf -- <论文.pdf> --style war-room --workspace C:\\Temp\\conversion-eval\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --render-pages key\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --result C:\\Temp\\article.md --facts C:\\Temp\\fact-ledger.verified.json\n\n行为：\n  - 必须指定仓库外、无 .git 的空 --workspace；不会复制 PDF 或调用 Git。\n  - 生成 extraction.json、navigation.json、fact-ledger.draft.json、evaluation-manifest.json。\n  - --render-pages 时调用系统 PATH 中的 pdftoppm，或 --poppler 指定的可执行文件。\n  - 仅在传入 --result 与事实清单时写入结构评分卡；不会生成文章或自行宣布 8/8。\n\n选项：\n  --workspace <仓库外目录>\n  --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  --result <仓库外 Markdown>\n  --facts <仓库外 fact-ledger.verified.json>\n  --level <default|expand|long>\n  --render-pages <key|1,3,5>\n  --render                         兼容别名，等同于 --render-pages key\n  --poppler <pdftoppm 路径>\n  --hanlp                          从导航页抽取关键词、实体和语义角色，写入草稿事实清单\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n`);
+  process.stdout.write(`本地 PDF 评测准备工具（Bun/TypeScript）\n\n用法：\n  bun run evaluate-pdf -- <论文.pdf> --style war-room --workspace C:\\Temp\\conversion-eval\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --render-pages key\n  bun run evaluate-pdf -- <论文.pdf> --style detective --workspace C:\\Temp\\conversion-eval --result C:\\Temp\\article.md --facts C:\\Temp\\fact-ledger.verified.json\n\n行为：\n  - 必须指定仓库外、无 .git 的空 --workspace；不会复制 PDF 或调用 Git。\n  - 生成 extraction.json、navigation.json、fact-ledger.draft.json、evaluation-manifest.json。\n  - --render-pages 时调用系统 PATH 中的 pdftoppm，或 --poppler 指定的可执行文件。\n  - 仅在传入 --result 与事实清单时写入结构评分卡；不会生成文章或自行宣布 8/8。\n\n选项：\n  --workspace <仓库外目录>\n  --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  --result <仓库外 Markdown>\n  --facts <仓库外 fact-ledger.verified.json>\n  --level <default|expand|long>\n  --render-pages <key|1,3,5>\n  --render                         兼容别名，等同于 --render-pages key\n  --poppler <pdftoppm 路径>\n  --hanlp                          从导航页抽取关键词、实体和语义角色，写入草稿事实清单\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n  --deterministic                  清单不写耗时，JSON 键序固定\n`);
 }
 
 function parseArgs(argv: string[]): PdfEvaluatorArgs {
@@ -65,6 +66,7 @@ function parseArgs(argv: string[]): PdfEvaluatorArgs {
   let renderPages: PdfEvaluatorArgs["renderPages"];
   let popplerPath: string | undefined;
   let level: PdfEvaluatorArgs["level"] = "default";
+  let deterministic = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -127,6 +129,10 @@ function parseArgs(argv: string[]): PdfEvaluatorArgs {
       index += 1;
       continue;
     }
+    if (arg === "--deterministic") {
+      deterministic = true;
+      continue;
+    }
     if (arg === "--level") {
       const value = argv[index + 1];
       if (value !== "default" && value !== "expand" && value !== "long") usageError("--level 只能是 default、expand 或 long");
@@ -151,6 +157,7 @@ function parseArgs(argv: string[]): PdfEvaluatorArgs {
     popplerPath: popplerPath ? resolve(popplerPath) : undefined,
     level,
     hanlp,
+    deterministic,
   };
 }
 
@@ -465,12 +472,13 @@ async function main(argv: string[]): Promise<void> {
     navigation_entries: navigation.length,
     rendered,
     structural_check: structuralCheck ? structuralCheck.verdict : "NOT_RUN",
-    elapsed_ms: elapsedMs,
+    ...(args.deterministic ? {} : { elapsed_ms: elapsedMs }),
     cleanup: "该目录是一次性本地测试产物；验收完成后由调用者删除。",
     git: "本工具不调用 Git，且拒绝把产物写入仓库。",
   };
-  await writeFile(join(outputDir, "evaluation-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  printJson(manifest);
+  const manifestText = args.deterministic ? stableJson(manifest) : `${JSON.stringify(manifest, null, 2)}\n`;
+  await writeFile(join(outputDir, "evaluation-manifest.json"), manifestText);
+  process.stdout.write(manifestText);
 }
 
 if (import.meta.main) {

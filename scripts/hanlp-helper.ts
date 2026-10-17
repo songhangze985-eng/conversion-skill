@@ -242,12 +242,13 @@ export function evaluateHumanVoiceAndAntiSlop(
   nlp: HanLPDocumentAnalysis,
   style = "anime",
 ): HumanVoiceDiagnostics {
-  const rawLines = bodyText
+  const cleanedBody = bodyText.replace(/<!--[\s\S]*?-->/g, "");
+  const rawLines = cleanedBody
     .replace(/```[\s\S]*?```/g, "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !/^#{1,6}\s/.test(line) && !/^\|.*\|$/.test(line));
-  const paragraphs = bodyText
+  const paragraphs = cleanedBody
     .replace(/```[\s\S]*?```/g, "")
     .split(/\r?\n\s*\r?\n/)
     .map((paragraph) => paragraph.trim())
@@ -269,7 +270,7 @@ export function evaluateHumanVoiceAndAntiSlop(
   const personEntities = new Set(
     nlp.entities.filter((entity) => ["PERSON", "PER", "NR", "nr"].includes(entity.type)).map((entity) => entity.text),
   );
-  let maskedForDots = bodyText;
+  let maskedForDots = cleanedBody;
   for (const person of personEntities) {
     if (person.includes("·")) maskedForDots = maskedForDots.split(person).join("");
   }
@@ -285,7 +286,7 @@ export function evaluateHumanVoiceAndAntiSlop(
     sentenceLengthCv = mean > 0 ? Number((Math.sqrt(variance) / mean).toFixed(3)) : 0;
   }
 
-  const aiClichesFound = AI_CLICHE_PHRASES.filter((phrase) => bodyText.includes(phrase));
+  const aiClichesFound = AI_CLICHE_PHRASES.filter((phrase) => cleanedBody.includes(phrase));
   const issue1Warnings: string[] = [];
   const isVerse = style === "verse";
   const isNeutral = style === "neutral";
