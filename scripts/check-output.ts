@@ -8,7 +8,7 @@
  * are always reported as needing human or model review.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, evaluateHumanVoiceAndAntiSlop, loadCustomDictionary, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions, type HumanVoiceDiagnostics } from "./hanlp-helper";
 import {
@@ -61,7 +61,7 @@ export interface FactLedger {
 }
 
 export type GateVerdict = "PASS" | "FAIL";
-export type ReviewVerdict = "NEEDS_REVIEW" | "HANLP_ASSISTED_PASS" | "HANLP_ASSISTED_WARN";
+export type ReviewVerdict = "NEEDS_REVIEW" | "HANLP_ASSISTED_PASS" | "HANLP_ASSISTED_WARN" | "HANLP_NEURAL_PASS" | "HANLP_NEURAL_WARN" | "LOCAL_HEURISTIC_PASS" | "LOCAL_HEURISTIC_WARN";
 export type ComprehensionVerdict = "NOT_REQUESTED" | "STRUCTURE_PRESENT_NEEDS_REVIEW";
 
 interface MappingRow {
@@ -95,7 +95,49 @@ export interface OutputCheckOptions {
   stsThreshold?: number;
   maxDepDepth?: number;
   strictHumanVoice?: boolean;
+  enforceBaselineFloor?: boolean;
   precomputedStoryNlp?: HanLPDocumentAnalysis;
+}
+
+export interface ExpressionBaselineThresholds {
+  minParagraphCount: number;
+  minAvgSentencesPerParagraph: number;
+  maxSingleSentenceParagraphRatio: number;
+  minAvgParagraphChars: number;
+  maxNonEntityMiddleDots: number;
+  maxNarrativeBulletRatio: number;
+  minSentenceLengthCv: number;
+  maxUnbrokenClauseChars: number;
+  minMappingRows: number;
+  minBoundaryCellChars: number;
+  minVerificationChars: number;
+  minCausalStageCount: number;
+  minHumanVoiceScore: number;
+  minReadabilityScore: number;
+}
+
+export const DEFAULT_EXPRESSION_BASELINE: ExpressionBaselineThresholds = {
+  minParagraphCount: 3,
+  minAvgSentencesPerParagraph: 2,
+  maxSingleSentenceParagraphRatio: 0.3,
+  minAvgParagraphChars: 60,
+  maxNonEntityMiddleDots: 0,
+  maxNarrativeBulletRatio: 0.1,
+  minSentenceLengthCv: 0.22,
+  maxUnbrokenClauseChars: 38,
+  minMappingRows: 3,
+  minBoundaryCellChars: 6,
+  minVerificationChars: 45,
+  minCausalStageCount: 3,
+  minHumanVoiceScore: 75,
+  minReadabilityScore: 75,
+};
+
+export interface ExpressionBaselineReport {
+  baseline_verdict: GateVerdict;
+  thresholds: ExpressionBaselineThresholds;
+  metrics: Record<string, number | string | string[]>;
+  violations: string[];
 }
 
 export interface HanLPQualityReport {
@@ -108,6 +150,8 @@ export interface HanLPQualityReport {
   fact_semantic_scores: Array<{ fact_id: string; claim_similarity: number; matched_semantically: boolean }>;
   lao_yu_readability_score: number;
   human_voice_diagnostics: HumanVoiceDiagnostics;
+  syntax_analysis_source: "hanlp_neural_dep" | "local_heuristic_estimate";
+  readability_note: string;
 }
 
 export interface OutputCheckResult {
@@ -141,6 +185,8 @@ export interface OutputCheckResult {
   verdict_scope: "mechanical_only";
   verdict: "PASS" | "FAIL";
   hanlp_report?: HanLPQualityReport;
+  expression_baseline_verdict?: GateVerdict;
+  expression_baseline_report?: ExpressionBaselineReport;
 }
 
 export function readMarkdown(path: string): string {
@@ -392,7 +438,7 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const voice_leaks = VOICE_LEAKS.filter((phrase) => normalizedContains(`${storyBody(markdown)}\n${verificationText(markdown)}`, phrase));
   const ledger = loadFactLedger(options.factsPath, mapping, Boolean(options.requireFacts));
   const hanlpEnabled = Boolean(options.hanlpOptions?.enabled || options.precomputedStoryNlp);
-  const voiceRequested = Boolean(options.strictHumanVoice || hanlpEnabled);
+  const voiceRequested = Boolean(options.strictHumanVoice || options.enforceBaselineFloor || hanlpEnabled);
   const stsThreshold = options.stsThreshold ?? 0.62;
   const coverage = factCoverage(
     markdown,
@@ -411,12 +457,18 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const mechanicalVerdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
   const hanlp_report = voiceRequested ? buildHanlpReport(markdown, options, ledger, stsThreshold, style) : undefined;
   const humanVoiceFail = Boolean(options.strictHumanVoice && hanlp_report && humanVoiceBlocks(hanlp_report.human_voice_diagnostics, style));
-  const verdict = mechanicalVerdict === "PASS" && !humanVoiceFail ? "PASS" : "FAIL";
+  const localHeuristic = hanlp_report?.syntax_analysis_source === "local_heuristic_estimate";
+  const assistedPass = Boolean(hanlp_report && hanlp_report.lao_yu_readability_score >= 75 && term_id_coverage_verdict === "PASS");
   const semantic_quality_verdict: ReviewVerdict = !hanlpEnabled || !hanlp_report
     ? "NEEDS_REVIEW"
-    : hanlp_report.lao_yu_readability_score >= 75 && term_id_coverage_verdict === "PASS"
-      ? "HANLP_ASSISTED_PASS"
-      : "HANLP_ASSISTED_WARN";
+    : localHeuristic
+      ? (assistedPass ? "LOCAL_HEURISTIC_PASS" : "LOCAL_HEURISTIC_WARN")
+      : (assistedPass ? "HANLP_NEURAL_PASS" : "HANLP_NEURAL_WARN");
+  const expression_baseline_report = options.enforceBaselineFloor && hanlp_report
+    ? evaluateExpressionBaseline(markdown, storyBody(markdown), verificationText(markdown), mapping, hanlp_report.human_voice_diagnostics, hanlp_report.lao_yu_readability_score, style)
+    : undefined;
+  const baselineFail = expression_baseline_report?.baseline_verdict === "FAIL";
+  const verdict = mechanicalVerdict === "PASS" && !humanVoiceFail && !baselineFail ? "PASS" : "FAIL";
 
   return {
     has_mapping_table: mapping.ok,
@@ -449,6 +501,7 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
     verdict_scope: "mechanical_only",
     verdict,
     ...(hanlp_report ? { hanlp_report } : {}),
+    ...(expression_baseline_report ? { expression_baseline_verdict: expression_baseline_report.baseline_verdict, expression_baseline_report } : {}),
   };
 }
 
@@ -493,6 +546,111 @@ function buildHanlpReport(
     fact_semantic_scores,
     lao_yu_readability_score: Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty - jargonPenalty))),
     human_voice_diagnostics: evaluateHumanVoiceAndAntiSlop(body, nlp, style ?? options.expectedStyle ?? "anime"),
+    syntax_analysis_source: nlp.backendUsed === "local-fallback" ? "local_heuristic_estimate" : "hanlp_neural_dep",
+    readability_note: nlp.backendUsed === "local-fallback"
+      ? "可读性分数来自本地句法估算，不是 HanLP 神经网络依存分析。"
+      : "可读性分数使用 HanLP 依存句法深度。",
+  };
+}
+
+export function normalizeOutputMarkdown(markdown: string): string {
+  let text = markdown.replace(/\r\n/g, "\n").replace(/\u00ad/g, "");
+  const clicheReplacements: Array<[RegExp, string]> = [
+    [/(?:^|(?<=[。！？\n]\s*))(?:简单来说|换句话说|总而言之|综上所述|值得注意的是|需要指出的是|众所周知|不言而喻)[，,：:\s]+/gm, ""],
+    [/(?:^|(?<=[。！？\n]\s*))让我们(?:先)?(?:来看看|想象一下)[，,：:\s]*/gm, ""],
+  ];
+  for (const [pattern, replacement] of clicheReplacements) text = text.replace(pattern, replacement);
+  const styleMatch = text.match(/^>\s*表达风格[：:]\s*`?([a-z-]+)`?/m);
+  if (styleMatch?.[1] === "verse") return text;
+  const detailsMatch = text.match(/<details[\s\S]*?<\/details>/i);
+  if (!detailsMatch || detailsMatch.index === undefined) return text;
+  const detailsEnd = detailsMatch.index + detailsMatch[0].length;
+  const prefix = text.slice(0, detailsEnd);
+  const afterDetails = text.slice(detailsEnd);
+  const verifySplit = afterDetails.split(/(?=\*\*知识点校验\*\*|^##\s*知识点校验)/m);
+  if (verifySplit.length < 2) return text;
+  let rawStory = verifySplit[0].replace(/^\s*[·•]\s+(.+)$/gm, "$1");
+  const suffix = verifySplit.slice(1).join("");
+  const merged: string[] = [];
+  let buffer = "";
+  for (const paragraph of rawStory.split(/\n\s*\n/).map((item) => item.trim()).filter(Boolean)) {
+    if (/^#{1,6}\s/u.test(paragraph) || /^>\s/u.test(paragraph) || /^\|.*\|$/u.test(paragraph)) {
+      if (buffer) merged.push(buffer);
+      buffer = "";
+      merged.push(paragraph);
+      continue;
+    }
+    if (!buffer) buffer = paragraph;
+    else if (buffer.length < 50 || paragraph.length < 42) {
+      buffer = `${buffer}${/[。！？!?…”"']$/u.test(buffer) ? "" : "。"}${paragraph}`;
+      if (buffer.length >= 110) {
+        merged.push(buffer);
+        buffer = "";
+      }
+    } else {
+      merged.push(buffer);
+      buffer = paragraph;
+    }
+  }
+  if (buffer) merged.push(buffer);
+  return `${prefix}\n\n${merged.join("\n\n")}\n\n${suffix.trimStart()}`;
+}
+
+function evaluateExpressionBaseline(
+  markdown: string,
+  body: string,
+  verifySection: string,
+  mapping: MappingCheck,
+  humanVoice: HumanVoiceDiagnostics,
+  readabilityScore: number,
+  style: string | null,
+): ExpressionBaselineReport {
+  const thresholds = DEFAULT_EXPRESSION_BASELINE;
+  const violations: string[] = [];
+  const paragraphs = body.split(/\r?\n\s*\r?\n/u).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph && !/^#{1,6}\s/u.test(paragraph));
+  const sentenceCount = Math.max(1, body.split(/[。！？!?]/u).filter((sentence) => sentence.trim().length > 0).length);
+  const avgSentences = paragraphs.length > 0 ? Number((sentenceCount / paragraphs.length).toFixed(2)) : 0;
+  const avgChars = paragraphs.length > 0 ? Math.round(paragraphs.reduce((sum, paragraph) => sum + markdownWordCount(paragraph), 0) / paragraphs.length) : 0;
+  const maxClause = Math.max(0, ...body.replace(/[“”"']/g, "").split(/[。！？；，：!?;,:\n]+/u).map((clause) => markdownWordCount(clause.trim())));
+  const boundaryRows = mapping.rows.filter((row) => (row.boundary ?? "").trim().length >= thresholds.minBoundaryCellChars && !/(?:待填|占位|TBD|TODO|^无$|^略$)/iu.test(row.boundary ?? ""));
+  const combined = `${body}\n${verifySection}`;
+  const stages = [
+    /(?:当|遇到|一旦|如果|为了|痛点|卡在|需要)/u.test(combined) ? "trigger" : "",
+    /(?:先|再|接着|通过|打分|转换|选出|分成)/u.test(combined) ? "action" : "",
+    /(?:但是|然而|限制|代价|边界|风险|只对|失效|更像)/u.test(combined) ? "constraint" : "",
+    /(?:最终|结果|导致|提高|降低|变成|因此)/u.test(combined) ? "outcome" : "",
+  ].filter(Boolean);
+  const verifyChars = markdownWordCount(verifySection);
+  if (style !== "verse") {
+    if (paragraphs.length < thresholds.minParagraphCount) violations.push(`[最低表达基线·段落数不足] 正文自然段仅 ${paragraphs.length} 段`);
+    if (avgSentences < thresholds.minAvgSentencesPerParagraph) violations.push(`[最低表达基线·段落单薄] 平均每段仅 ${avgSentences} 句`);
+    if (humanVoice.singleSentenceParagraphRatio > thresholds.maxSingleSentenceParagraphRatio) violations.push(`[最低表达基线·一行一句超标] 单句成段占比 ${Math.round(humanVoice.singleSentenceParagraphRatio * 100)}%`);
+    if (avgChars < thresholds.minAvgParagraphChars) violations.push(`[最低表达基线·段落信息量过低] 平均段落字数仅 ${avgChars} 字`);
+  }
+  if (humanVoice.nonEntityMiddleDotCount > thresholds.maxNonEntityMiddleDots) violations.push(`[最低表达基线·禁用「·」] 检测到 ${humanVoice.nonEntityMiddleDotCount} 处非人名居中圆点`);
+  if (style !== "neutral" && humanVoice.bulletLineRatio > thresholds.maxNarrativeBulletRatio) violations.push(`[最低表达基线·正文清单化] 列表行占比 ${Math.round(humanVoice.bulletLineRatio * 100)}%`);
+  if (maxClause > thresholds.maxUnbrokenClauseChars) violations.push(`[最低表达基线·单句过长] 存在 ${maxClause} 字无标点停顿`);
+  if (mapping.rows.length < thresholds.minMappingRows) violations.push(`[最低表达基线·映射深度不足] 映射表仅 ${mapping.rows.length} 行`);
+  if (boundaryRows.length < mapping.rows.length) violations.push(`[最低表达基线·类比边界缺失] 有效边界 ${boundaryRows.length}/${mapping.rows.length} 行`);
+  if (verifyChars < thresholds.minVerificationChars) violations.push(`[最低表达基线·知识点校验敷衍] 仅 ${verifyChars} 字`);
+  if (stages.length < thresholds.minCausalStageCount) violations.push(`[最低表达基线·机制因果链残缺] 仅覆盖 ${stages.length}/4 个阶段`);
+  if (humanVoice.humanVoiceScore < thresholds.minHumanVoiceScore) violations.push(`[最低表达基线·人味分数未达标] 当前 ${humanVoice.humanVoiceScore} 分`);
+  if (readabilityScore < thresholds.minReadabilityScore) violations.push(`[最低表达基线·可读性未达标] 当前 ${readabilityScore} 分`);
+  return {
+    baseline_verdict: violations.length === 0 ? "PASS" : "FAIL",
+    thresholds,
+    metrics: {
+      paragraph_count: paragraphs.length,
+      avg_sentences_per_paragraph: avgSentences,
+      avg_paragraph_chars: avgChars,
+      max_unbroken_clause_chars: maxClause,
+      mapping_rows: mapping.rows.length,
+      verification_chars: verifyChars,
+      causal_stages_covered: stages,
+      human_voice_score: humanVoice.humanVoiceScore,
+      readability_score: readabilityScore,
+    },
+    violations,
   };
 }
 
@@ -508,8 +666,10 @@ function computeClaimSimilarity(body: string, verification: string, claim: strin
 function reviewLabel(verdict: ReviewVerdict | ComprehensionVerdict): string {
   if (verdict === "NOT_REQUESTED") return "未请求（不能据此判断用户已理解）";
   if (verdict === "STRUCTURE_PRESENT_NEEDS_REVIEW") return "已见题目结构，需要人工或模型复核";
-  if (verdict === "HANLP_ASSISTED_PASS") return "HanLP 辅助可读性通过，仍需人工复核语义";
-  if (verdict === "HANLP_ASSISTED_WARN") return "HanLP 辅助发现拗口句或未铺垫术语，需要改稿";
+  if (verdict === "HANLP_ASSISTED_PASS" || verdict === "HANLP_NEURAL_PASS") return "HanLP 依存分析可读性通过，仍需人工复核语义";
+  if (verdict === "HANLP_ASSISTED_WARN" || verdict === "HANLP_NEURAL_WARN") return "HanLP 依存分析发现拗口句或未铺垫术语，需要改稿";
+  if (verdict === "LOCAL_HEURISTIC_PASS") return "本地句法估算可读性通过，不是神经网络依存分析";
+  if (verdict === "LOCAL_HEURISTIC_WARN") return "本地句法估算未过可读性线，不是神经网络依存分析";
   return "需要人工或模型复核";
 }
 
@@ -529,8 +689,13 @@ function render(result: OutputCheckResult): string {
     `  语义质量评估: ${reviewLabel(result.semantic_quality_verdict)}`,
     `  用户理解验证: ${reviewLabel(result.comprehension_verdict)}`,
   ];
+  if (result.expression_baseline_report) {
+    lines.push(`  最低表达水平线: ${result.expression_baseline_report.baseline_verdict}`);
+    for (const violation of result.expression_baseline_report.violations) lines.push(`    ${violation}`);
+  }
   if (result.hanlp_report) {
-    lines.push(`  HanLP 辅助: ${result.hanlp_report.backend}，老妪能解可读性 ${result.hanlp_report.lao_yu_readability_score}，人味 ${result.hanlp_report.human_voice_diagnostics.humanVoiceScore}`);
+    lines.push(`  HanLP 辅助: ${result.hanlp_report.backend}，${result.hanlp_report.syntax_analysis_source}，老妪能解可读性 ${result.hanlp_report.lao_yu_readability_score}，人味 ${result.hanlp_report.human_voice_diagnostics.humanVoiceScore}`);
+    lines.push(`    ${result.hanlp_report.readability_note}`);
     for (const warning of result.hanlp_report.human_voice_diagnostics.issue1Warnings) lines.push(`    ${warning}`);
     if (result.hanlp_report.unexplained_jargon.length > 0) {
       lines.push(`    未铺垫术语: ${result.hanlp_report.unexplained_jargon.slice(0, 5).join("、")}`);
@@ -544,10 +709,10 @@ function render(result: OutputCheckResult): string {
 }
 
 function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用 14 项最低表达水平线验收，未过线则总结论改为 FAIL\n  --fix                          落盘前去掉套话前缀、行首圆点，并合并过短段落\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
 }
 
-function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean } {
+function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean; enforceBaselineFloor: boolean; fix: boolean } {
   const hanlp = parseHanLPCliOptions(argv);
   let file: string | undefined;
   let level: OutputLevel = "default";
@@ -558,6 +723,8 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
   let stsThreshold: number | undefined;
   let maxDepDepth: number | undefined;
   let strictHumanVoice = false;
+  let enforceBaselineFloor = false;
+  let fix = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -608,6 +775,14 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
       strictHumanVoice = true;
       continue;
     }
+    if (arg === "--baseline-floor") {
+      enforceBaselineFloor = true;
+      continue;
+    }
+    if (arg === "--fix") {
+      fix = true;
+      continue;
+    }
     if (arg === "--max-dep-depth") {
       const value = Number(argv[index + 1]);
       if (!Number.isInteger(value) || value < 1) usageError("--max-dep-depth 需要正整数");
@@ -627,13 +802,15 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
     file = arg;
   }
   if (!file) usageError("请提供 Markdown 路径");
-  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice };
+  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice, enforceBaselineFloor, fix };
 }
 
 if (import.meta.main) {
   const args = parseArgs(Bun.argv.slice(2));
   const run = async (): Promise<void> => {
-    const markdown = readMarkdown(args.file);
+    const original = readMarkdown(args.file);
+    const markdown = args.fix ? normalizeOutputMarkdown(original) : original;
+    if (args.fix && markdown !== original) writeFileSync(args.file, markdown.endsWith("\n") ? markdown : `${markdown}\n`);
     const precomputedStoryNlp = args.hanlp.enabled ? await analyzeWithHanLP(storyBody(markdown) || markdown, args.hanlp) : undefined;
     const result = analyzeMarkdown(markdown, {
       level: args.level,
@@ -644,6 +821,7 @@ if (import.meta.main) {
       stsThreshold: args.stsThreshold,
       maxDepDepth: args.maxDepDepth,
       strictHumanVoice: args.strictHumanVoice,
+      enforceBaselineFloor: args.enforceBaselineFloor,
       precomputedStoryNlp,
     });
     if (args.json) printJson(result);

@@ -356,16 +356,22 @@ function computeDepTreeDepth(depRelations: Array<[number, string]>): number {
 }
 
 function estimateLocalTreeDepth(sentence: string, tokens: string[]): number {
-  const clauseMarkers = (sentence.match(/[，、；：,;:（）()“”""]|(?:因为|所以|如果|虽然|但是|由于|不仅|而且|从而|导致|当.*时)/g) ?? []).length;
-  const tokenDepth = Math.ceil(tokens.length / 8);
-  return Math.max(1, Math.min(12, 1 + Math.floor(clauseMarkers * 0.7) + tokenDepth));
+  const stripped = sentence.replace(/[“”""「」]/gu, "");
+  const longClause = stripped.split(/[，。！？；、,;!?]/u).some((clause) => clause.trim().length > 38);
+  const deCount = (stripped.match(/的/gu) ?? []).length;
+  const passive = /被.{1,12}所|is\s+\w+ed\s+by/iu.test(stripped);
+  let depth = 1 + Math.floor(tokens.length / 14);
+  if (longClause) depth += 2;
+  if (deCount >= 4) depth += 2;
+  if (passive) depth += 1;
+  return Math.max(1, Math.min(12, depth));
 }
 
 function extractLocalSrlFrames(sentences: string[]): HanLPSrlFrame[] {
   const frames: HanLPSrlFrame[] = [];
   const condRegex = /(?:当|如果|若|一旦|在|给定|通过|基于|when|if|given|by)\s*([^，,。；;]+)/i;
   const constraintRegex = /(?:直到|除非|不得|限制|上限|下限|边界|满足|条件是|until|unless|subject to|bounded by)\s*([^，,。；;]+)/i;
-  const actionVerbRegex = /([^，,。；;]{1,18}?)(进行|执行|计算|更新|转换|映射|筛选|收敛|触发|生成|验证|分割|聚合|提取|拒绝|回退|传递|调用|更新为|转化为)([^，,。；;]{1,25})/;
+  const actionVerbRegex = /([^，,。；;]{1,18}?)(进行|执行|计算|更新|转换|映射|筛选|收敛|触发|生成|验证|分割|聚合|提取|拒绝|回退|传递|调用|更新为|转化为)([^，,。；;]{1,25})|(?:we find that|shows that|causes|increases|reduces)\s+([^.]{8,80})/i;
 
   for (const s of sentences) {
     const mAction = s.match(actionVerbRegex);
@@ -375,9 +381,9 @@ function extractLocalSrlFrames(sentences: string[]): HanLPSrlFrame[] {
       frames.push({
         sentence: s,
         triggerOrCondition: mCond ? [mCond[1].trim()] : [],
-        actorArg0: mAction && mAction[1].trim() ? [mAction[1].trim()] : [],
-        predicate: mAction ? mAction[2].trim() : "作用/推导",
-        targetArg1: mAction && mAction[3].trim() ? [mAction[3].trim()] : [s.slice(0, 32)],
+        actorArg0: mAction?.[1]?.trim() ? [mAction[1].trim()] : [],
+        predicate: mAction?.[2]?.trim() || (mAction?.[4] ? "find" : "") || "作用/推导",
+        targetArg1: mAction?.[3]?.trim() ? [mAction[3].trim()] : mAction?.[4]?.trim() ? [mAction[4].trim()] : [s.slice(0, 32)],
         constraintsOrManner: mConst ? [mConst[1].trim()] : [],
       });
     }
@@ -403,10 +409,14 @@ function extractLocalEntitiesAndKeyphrases(
     }
   }
 
-  const techMatches = text.match(/\b[A-Z][A-Za-z0-9_-]{2,}\b|「[^」]{2,15}」|“[^”]{2,15}”|[\u4e00-\u9fff]{2,6}(?:算法|机制|模型|公式|定理|协议|分布|网络|矩阵|函数|系统|结构|树|层|概率|梯度|注意力|编码器|解码器)/g) ?? [];
+  const headerAuthors = new Set(
+    (text.split(/\r?\n/u).slice(0, 4).join(" ").match(/\b[A-Z][a-z]{2,}\b/gu) ?? []).map((name) => name.toLowerCase()),
+  );
+  const journalNoise = new Set(["sci", "adv", "science", "advances", "doi", "vol", "fig", "table", "july", "article"]);
+  const techMatches = text.match(/\b(?:[A-Z]{2,}(?:-\d+)?|[A-Z][a-z]+(?:\s+[a-z]+){0,3})\b|「[^」]{2,15}」|“[^”]{2,15}”|[\u4e00-\u9fff]{2,6}(?:算法|机制|模型|公式|定理|协议|分布|网络|矩阵|函数|系统|结构|树|层|概率|梯度|注意力|编码器|解码器)/g) ?? [];
   for (const tm of techMatches) {
     const cleaned = tm.replace(/^[「“]|[」”]$/g, "").trim();
-    if (cleaned.length >= 2) {
+    if (cleaned.length >= 2 && !headerAuthors.has(cleaned.toLowerCase()) && !journalNoise.has(cleaned.toLowerCase()) && !/^(?:results|discussion|materials|methods|introduction|abstract)$/iu.test(cleaned)) {
       freq.set(cleaned, (freq.get(cleaned) ?? 0) + 3);
     }
   }
