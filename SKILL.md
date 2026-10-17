@@ -5,7 +5,7 @@ license: MIT
 compatibility: "The Markdown skill is host-agnostic and has no runtime dependency. Optional local validation, evaluation, and HanLP NLP helper scripts support Bun/Node and optional HanLP RESTful/Native backends."
 metadata:
   author: songhangze985-eng
-  version: "2.3.0"
+  version: "2.3.1"
 ---
 
 # conversion-skill
@@ -13,6 +13,16 @@ metadata:
 可验证的复杂知识解释 Skill。我们的目标不是给专业术语硬套一层口语外皮，而是顺着普通人的直觉卡点把底层机制讲透，同时让每一个比喻都有据可查、有界可依。
 
 表达风格只是帮助读者建立直觉的桥梁：**事实优先于修辞，顺畅好懂优先于形式花哨。** 默认使用 `anime`（轻快角色叙事）；当用户点名其他文体，或某种风格反而增加理解负担时，立即切换为指定风格或 `neutral`（中性直述）。
+
+## 模型无关的最低表达程度水平线
+
+无论宿主用哪一个模型，交稿都可以用 `bun run check-output -- <result.md> --fix --baseline-floor --strict-human-voice` 先整形再验收。未过线时总结论为 `FAIL`。默认不打开这两项开关，原有机械门禁保持不变。
+
+1. 除 `verse` 外，正文至少 3 个自然段，平均每段至少 2 句、60 字，单句成段占比不超过 30%。
+2. 去掉合法外国人名后，正文里的 `·` / `•` 必须为 0。非 `neutral` 的列表行不超过 10%。人味指数至少 75，且不用「总而言之 / 简单来说 / 想象一下」这类套话。
+3. 正文和知识点校验至少覆盖「痛点、动作、约束、结果」四段里的三段。定量结果要保留方向或数字。
+4. 四列映射至少 3 行，每一行的适用边界至少 6 个字，不能写「无 / 略 / 待填」。
+5. 连续无标点不超过 38 字。知识点校验至少 45 字。专业词要先在场景或映射里出现。`--fix` 会去掉套话前缀和行首圆点，并把过短的相邻句合成自然段。
 
 在工程辅助层，本项目支持以 [HanLP](https://github.com/hankcs/HanLP)（RESTful API 或本地 Native API）作为可选 NLP 辅助引擎，在不改变零依赖 Markdown 核心流程与现有全部 CLI 选项的前提下，增强中文与多语种分词（`tok`）、命名实体与术语识别（`ner`）、语义角色标注（`srl`）、依存句法复杂度检测（`dep`）、语义文本相似度核验（`sts`）、关键短语抽取（`keyphrase`）以及针对 Issue #1 的「去 AI 厕纸感（反一行一句 / 反 `·` 分点 / 人味节奏）」量化检测。
 

@@ -16,7 +16,7 @@ import { analyzeMarkdown, readMarkdown, type FactLedger } from "./check-output";
 import { analyzeWithHanLP, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
 import { isExpressionStyle, printJson, relativeIsInside, type ExpressionStyle, usageError } from "./shared";
 
-type NavigationKind = "title" | "abstract" | "method" | "conclusion";
+type NavigationKind = "title" | "abstract" | "results" | "method" | "conclusion";
 
 interface PageText {
   page: number;
@@ -46,8 +46,9 @@ interface PdfEvaluatorArgs {
 
 const SECTION_PATTERNS: Record<Exclude<NavigationKind, "title">, RegExp> = {
   abstract: /(?:^|\n)\s*(?:摘要|abstract)\b/imu,
-  method: /(?:^|\n)\s*(?:方法|研究方法|方法论|method(?:ology)?|approach|model)\b/imu,
-  conclusion: /(?:^|\n)\s*(?:结论|讨论与结论|conclusion|conclusions|discussion)\b/imu,
+  results: /(?:^|\n)\s*(?:结果|results)\b/imu,
+  method: /(?:^|\n)\s*(?:材料与方法|材料和方法|方法|研究方法|方法论|materials and methods|method(?:ology)?)\b/imu,
+  conclusion: /(?:^|\n)\s*(?:结论|讨论与结论|讨论|conclusion|conclusions|discussion)\b/imu,
 };
 
 function help(): void {
@@ -201,18 +202,49 @@ async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageC
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
     const page = await document.getPage(pageNumber);
     const content = await page.getTextContent();
-    let text = "";
+    const lines: string[] = [];
+    let currentLine = "";
+    let lastY: number | null = null;
     for (const item of content.items) {
       if (!("str" in item)) continue;
-      text += item.str;
-      if (item.hasEOL) text += "\n";
-      else text += " ";
+      const str = item.str;
+      const transform = "transform" in item && Array.isArray(item.transform) ? item.transform : undefined;
+      const y = typeof transform?.[5] === "number" ? transform[5] : null;
+      if (lastY !== null && y !== null && Math.abs(y - lastY) > 2.5) {
+        if (currentLine.trim()) lines.push(currentLine.trim());
+        currentLine = str;
+      } else {
+        currentLine += (currentLine && !currentLine.endsWith(" ") && str && !str.startsWith(" ") ? " " : "") + str;
+      }
+      if (item.hasEOL) {
+        if (currentLine.trim()) lines.push(currentLine.trim());
+        currentLine = "";
+        lastY = null;
+      } else if (y !== null) {
+        lastY = y;
+      }
     }
-    text = normalizePdfText(text);
+    if (currentLine.trim()) lines.push(currentLine.trim());
+    const text = normalizePdfText(lines.join("\n"));
     pages.push({ page: pageNumber, text, characters: text.length });
   }
-  await document.destroy();
+  const closers = [document as { destroy?: () => Promise<void>; cleanup?: () => void }, loadingTask as { destroy?: () => Promise<void> }];
+  if (typeof closers[0].destroy === "function") await closers[0].destroy();
+  else if (typeof closers[0].cleanup === "function") closers[0].cleanup();
+  if (typeof closers[1].destroy === "function") await closers[1].destroy();
   return { pages, pageCount: pages.length };
+}
+
+function isRunningHeaderOrBannerLine(line: string): boolean {
+  const trimmed = line.trim();
+  const tokens = trimmed.split(/\s+/u).filter(Boolean);
+  const singleLetterRatio = tokens.length === 0 ? 0 : tokens.filter((token) => token.length === 1).length / tokens.length;
+  if (singleLetterRatio > 0.6) return true;
+  if (trimmed.length < 12) return true;
+  if (/sci\.?\s*adv|science advances|research article|computer science|^\d+\s+of\s+\d+/iu.test(trimmed)) return true;
+  if (/^doshi and hauser/iu.test(trimmed)) return true;
+  if (/\b(?:19|20)\d{2}\b/u.test(trimmed) && /\b(?:doi|vol\.|eadn\d+)/iu.test(trimmed)) return true;
+  return false;
 }
 
 function truncateEvidence(text: string, maximum = 420): string {
@@ -223,20 +255,46 @@ function truncateEvidence(text: string, maximum = 420): string {
 function titleEvidence(pages: PageText[]): NavigationEntry | undefined {
   const first = pages[0];
   if (!first?.text) return undefined;
-  const candidate = first.text
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find((line) => line.length >= 6 && line.length <= 220 && !/^(?:摘要|abstract|关键词|keywords)$/iu.test(line));
-  if (!candidate) return undefined;
+  const lines = first.text.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+  const titleLines: string[] = [];
+  for (const line of lines) {
+    if (isRunningHeaderOrBannerLine(line)) continue;
+    if (/^(?:摘要|abstract|关键词|keywords|introduction|引言)$/iu.test(line)) break;
+    if (/^[A-Z][a-z]+(?:\s+[A-Z]\.)?\s+[A-Z][a-z]+/u.test(line) && line.length < 40) break;
+    if (/^\*?\s*and\s+[A-Z]/u.test(line)) break;
+    titleLines.push(line);
+    if (titleLines.join(" ").length > 180) break;
+  }
+  const candidate = titleLines.join(" ").replace(/\s+/gu, " ").trim();
+  if (candidate.length < 12) return undefined;
   return { id: "N01", kind: "title", page: first.page, section: "title", evidence: truncateEvidence(candidate) };
+}
+
+function untitledAbstract(pages: PageText[]): NavigationEntry | undefined {
+  const first = pages[0];
+  if (!first?.text || sectionEvidence("abstract", pages)) return undefined;
+  const intro = /\n\s*introduction\b/iu.exec(first.text);
+  if (!intro || intro.index === undefined) return undefined;
+  const before = first.text.slice(0, intro.index);
+  const lines = before.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 80 && !isRunningHeaderOrBannerLine(line));
+  const body = lines.join(" ").replace(/\s+/gu, " ").trim();
+  if (body.length < 180) return undefined;
+  return { id: "", kind: "abstract", page: first.page, section: "abstract", evidence: truncateEvidence(body, 1200) };
 }
 
 function sectionEvidence(kind: Exclude<NavigationKind, "title">, pages: PageText[]): NavigationEntry | undefined {
   const pattern = SECTION_PATTERNS[kind];
-  const page = pages.find((item) => pattern.test(item.text));
+  const page = pages.find((item) => item.text.split(/\r?\n/u).some((line) => {
+    const trimmed = line.trim();
+    return trimmed.length <= 48 && pattern.test(`\n${trimmed}`);
+  }));
   if (!page) return undefined;
-  const headingMatch = pattern.exec(page.text);
-  const fromHeading = headingMatch?.index === undefined ? page.text : page.text.slice(headingMatch.index);
+  const headingLine = page.text.split(/\r?\n/u).find((line) => {
+    const trimmed = line.trim();
+    return trimmed.length <= 48 && pattern.test(`\n${trimmed}`);
+  }) ?? "";
+  const headingIndex = page.text.indexOf(headingLine);
+  const fromHeading = headingIndex < 0 ? page.text : page.text.slice(headingIndex);
   return {
     id: "",
     kind,
@@ -249,7 +307,8 @@ function sectionEvidence(kind: Exclude<NavigationKind, "title">, pages: PageText
 function buildNavigation(pages: PageText[]): NavigationEntry[] {
   const entries = [
     titleEvidence(pages),
-    sectionEvidence("abstract", pages),
+    sectionEvidence("abstract", pages) ?? untitledAbstract(pages),
+    sectionEvidence("results", pages),
     sectionEvidence("method", pages),
     sectionEvidence("conclusion", pages),
   ].filter((entry): entry is NavigationEntry => entry !== undefined);
