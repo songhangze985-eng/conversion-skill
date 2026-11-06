@@ -3,6 +3,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
+import { screenThesisKeywords, type UserHabitOption } from "./screen-keywords";
 import { isExpressionStyle, isOutputLevel, type ExpressionStyle, type OutputLevel, usageError } from "./shared";
 
 const STYLE_DESCRIPTIONS: Record<ExpressionStyle, string> = {
@@ -28,8 +29,14 @@ const LEGACY_STYLE_ALIASES: Record<string, { style: ExpressionStyle; intensity: 
   heavy: { style: "anime", intensity: "heavy" },
 };
 
-function prefillFromSource(sourceText: string, hanlpOptions?: HanLPOptions, analysis?: HanLPDocumentAnalysis): { facts: string; mappingRows: string } {
+function prefillFromSource(
+  sourceText: string,
+  hanlpOptions?: HanLPOptions,
+  analysis?: HanLPDocumentAnalysis,
+  habit: UserHabitOption = "auto",
+): { facts: string; mappingRows: string; CoreGist?: string } {
   const resolved = analysis ?? analyzeWithHanLPSync(sourceText, hanlpOptions?.enabled ? hanlpOptions : { ...hanlpOptions, enabled: false, mode: "local-fallback" });
+  const screened = screenThesisKeywords(sourceText, { habit });
   const factLines = resolved.srlFrames.slice(0, 4).map((frame) => {
     const trigger = frame.triggerOrCondition.join("、") || "（待填写触发条件）";
     const actor = frame.actorArg0.join("、") || "（待填写主体）";
@@ -37,17 +44,20 @@ function prefillFromSource(sourceText: string, hanlpOptions?: HanLPOptions, anal
     const constraint = frame.constraintsOrManner.join("、") || "（待填写约束）";
     return `- [条件] ${trigger} -> [主体] ${actor} -> [动作] ${frame.predicate} -> [对象] ${target} -> [限制] ${constraint}`;
   });
+  const gistLine = `- [切中要害·最简白话主旨] ${screened.pithy_vernacular_summary}`;
+  const allFactLines = [gistLine, ...factLines];
   const concepts = [...new Set([
+    ...screened.thesis_keywords.map((k) => k.keyword),
     ...resolved.keyphrases.map((item) => item.phrase),
     ...resolved.entities.map((entity) => entity.text),
   ])].filter((term) => term.trim().length >= 2).slice(0, 6);
+  const firstHabitAnalogy = screened.habit_analogy_mappings[0]?.daily_lingo_mapping ?? "";
   return {
-    facts: factLines.length > 0
-      ? `- 原文事实：\n${factLines.join("\n")}`
-      : "- 原文事实：",
+    facts: `- 原文事实：\n${allFactLines.join("\n")}`,
     mappingRows: concepts.length > 0
-      ? concepts.map((concept) => `| ${concept} |  |  |  |`).join("\n")
+      ? concepts.map((concept, idx) => `| ${concept} | ${idx === 0 && firstHabitAnalogy ? `${screened.habit_analogy_mappings[0]?.habit_label ?? "日常话术"}` : ""} | ${idx === 0 && firstHabitAnalogy ? firstHabitAnalogy : ""} |  |`).join("\n")
       : "|  |  |  |  |",
+    CoreGist: screened.pithy_vernacular_summary,
   };
 }
 
@@ -78,8 +88,9 @@ export function renderTemplate(
   hanlpOptions?: HanLPOptions,
   analysis?: HanLPDocumentAnalysis,
   chunkCount?: number,
+  habit: UserHabitOption = "auto",
 ): string {
-  const prefill = sourceText?.trim() ? prefillFromSource(sourceText, hanlpOptions, analysis) : undefined;
+  const prefill = sourceText?.trim() ? prefillFromSource(sourceText, hanlpOptions, analysis, habit) : undefined;
   const formulaSection = withFormula
     ? `### 公式含义
 
@@ -153,7 +164,7 @@ ${comprehensionSection}`;
 }
 
 function help(): void {
-  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n      --chunks <N>           仅 long：独立机制分块数，至少 3，默认 4\n      --source <文本或文件>  用 HanLP/本地分析预填事实骨架与知识概念列\n  -o, --output <路径>\n      --hanlp\n      --hanlp-mode <auto|restful|native|local-fallback>\n      --hanlp-url <url>\n      --hanlp-auth <key>\n      --hanlp-lang <zh|mul|en>\n      --custom-dict <path>\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。未提供 --source 时骨架与旧版一致。\n`);
+  process.stdout.write(`生成五步转换骨架（Bun/TypeScript）\n\n用法：\n  bun run generate-template -- -t \"快速排序\"\n  bun run generate-template -- -t \"时空预测\" -s nature-documentary -l expand --with-comprehension\n\n选项：\n  -t, --topic <文本>\n  -s, --style <anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>\n  -l, --level <default|expand|long>\n      --with-formula\n      --with-comprehension   追加可选理解检验占位，默认不输出\n      --chunks <N>           仅 long：独立机制分块数，至少 3，默认 4\n      --source <文本或文件>  用 HanLP/本地分析预填事实骨架与知识概念列\n      --habit <auto|gaming|daily|workplace> 按用户日常/游戏习惯预填话术映射\n  -o, --output <路径>\n      --hanlp\n      --hanlp-mode <auto|restful|native|local-fallback>\n      --hanlp-url <url>\n      --hanlp-auth <key>\n      --hanlp-lang <zh|mul|en>\n      --custom-dict <path>\n\n兼容：旧的 --style light|standard|heavy 会映射为 anime，并保留表达强度。未提供 --source 时骨架与旧版一致。\n`);
 }
 
 function readSource(value: string): string {
@@ -161,7 +172,7 @@ function readSource(value: string): string {
   return value;
 }
 
-function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean; sourceText?: string; outputPath?: string; chunkCount?: number; hanlp: HanLPOptions } {
+function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; level: OutputLevel; withFormula: boolean; intensity: string; withComprehension: boolean; sourceText?: string; outputPath?: string; chunkCount?: number; habit: UserHabitOption; hanlp: HanLPOptions } {
   const hanlp = parseHanLPCliOptions(argv);
   let topic: string | undefined;
   let style: ExpressionStyle = "anime";
@@ -172,6 +183,7 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
   let sourceText: string | undefined;
   let outputPath: string | undefined;
   let chunkCount: number | undefined;
+  let habit: UserHabitOption = "auto";
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -232,6 +244,15 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
       index += 1;
       continue;
     }
+    if (arg === "--habit") {
+      const value = argv[index + 1] as UserHabitOption | undefined;
+      if (!value || !["auto", "gaming", "daily", "workplace"].includes(value)) {
+        usageError("--habit 只能是 auto、gaming、daily 或 workplace");
+      }
+      habit = value;
+      index += 1;
+      continue;
+    }
     if (arg === "-o" || arg === "--output") {
       outputPath = argv[index + 1];
       if (!outputPath) usageError(`${arg} 需要路径`);
@@ -241,7 +262,7 @@ function parseArgs(argv: string[]): { topic: string; style: ExpressionStyle; lev
     usageError(`未知选项：${arg}`);
   }
   if (!topic) usageError("请通过 -t 或 --topic 提供主题");
-  return { topic, style, level, withFormula, intensity, withComprehension, sourceText, outputPath, chunkCount, hanlp };
+  return { topic, style, level, withFormula, intensity, withComprehension, sourceText, outputPath, chunkCount, habit, hanlp };
 }
 
 if (import.meta.main) {
@@ -260,6 +281,7 @@ if (import.meta.main) {
       args.hanlp,
       analysis,
       args.chunkCount,
+      args.habit,
     );
     if (args.outputPath) writeFileSync(args.outputPath, `${markdown}\n`);
     else process.stdout.write(`${markdown}\n`);
