@@ -8,7 +8,13 @@
 
 第 1–5 步照旧做完。完整稿仍使用现有骨架：风格与篇幅元信息、`<details>` 里的理解、事实清单、四列映射、门禁自检、正文、知识点校验。
 
-有 Bun 时，`check-output` 只检查这份完整稿。不要拿剥掉分析后的回复去跑检查。
+有 Bun 时，`check-output` 只检查这份完整稿。不要拿剥掉分析后的回复去跑检查。可将完整稿先写入临时文件，再通过 `--emit-folded -` 一键完成「门禁校验 + 导出折叠正文」闭环：
+
+```bash
+bun run check-output -- /tmp/conversion-draft.md --fix --baseline-floor --strict-human-voice --emit-folded -
+```
+
+用户追问映射时，也可运行 `--emit-annotated -` 导出带 `〔知识概念〕对应机制。适用边界。` 内联标注的呈现稿。
 
 四列映射留在完整稿里，列仍是：知识概念、类比元素、对应机制、适用边界。
 
