@@ -5,7 +5,7 @@ license: MIT
 compatibility: "The Markdown skill is host-agnostic and has no runtime dependency. Optional local validation, evaluation, and HanLP NLP helper scripts support Bun/Node and optional HanLP RESTful/Native backends."
 metadata:
   author: songhangze985-eng
-  version: "2.4.0"
+  version: "2.5.0"
 ---
 
 # conversion-skill
@@ -54,6 +54,7 @@ metadata:
 3. **动作先行，术语点睛**：读者先在场景里看懂「遇到了什么麻烦、做了什么动作、撞上了什么限制」，再顺手点出这个动作在专业上叫什么。
 4. **比喻有边界，穿帮即换**：任何类比都有失效的地方。在映射表中诚实标出「适用边界」；如果某个风格不得不扭曲机制才能圆场，果断降档为 `neutral` 或切换更贴切的载体。
 5. **结构合法不等于听懂了，更要拒绝「AI 快餐文腔调」**：通过脚本格式检验只是底线，真正的标准是外行读完能用白话复述核心机制，且行文自然连贯、有真人讲述的呼吸感，不写「一行一句」的碎段落，不在叙事正文里堆砌 `·` 分点清单。
+6. **严守叙述边界：通俗易懂是日常/游戏话术精准映射，不是长篇大论编故事；遇文言文或重复观点文章则直击要害**：类比必须干净利落（优先顺应用户习惯，如用游戏 `CD`/蓝耗/仇恨/读档等日常话术一两句点透），严禁铺垫无关的世界观、风景或身世注水；面对反复强调同一观点的文章或文言文时，直接调用自建文言文翻译 JSON 知识库（`assets/knowledge/classical-chinese-kb.json`）与切中观点的关键词筛选工具（`scripts/screen-keywords.ts`），用最简洁的白话文切中要害向读者阐述。
 
 ## 资源路由
 
@@ -61,22 +62,29 @@ metadata:
 |---|---|
 | 第 2 步：区分原文事实、必要推导、类比与未确认信息 | `references/fact-traceability.md` |
 | 第 3 步：建立场景同构映射与适用边界 | `references/mapping-principles.md` |
+| 设定叙述边界（游戏/日常话术映射）及文言文/重复观点极简白话阐述 | `references/narrative-boundary-and-gist.md` + `assets/knowledge/classical-chinese-kb.json` |
 | 第 4 步：匹配表达文体 | 先读 `references/style-selector.md`，再只读所选文体的对应文件 |
 | 二次元 / 角色叙事 (默认) | `references/style-anime.md`；需要角色参考时读 `assets/templates/character-archetypes.md` |
 | 侦探推理 / 项目战情室 / 自然纪录片 | 分别读 `references/style-detective.md`、`references/style-war-room.md`、`references/style-nature-documentary.md` |
 | 现代短诗 / 记叙文 / 播客对谈 | 分别读对应的 `style-*.md` 与 `*-workflow.md` |
+| 状态机 / 并发协议 / 连续数学分布的可视化与交互微件 | `references/visual-interactive.md` |
+| 用户要求「一步步带我推 / 边问边讲 / 苏格拉底式启发」 | `references/socratic-microstep.md` |
+| 用户自述零基础小白、理解力弱、看天书或反馈「还是没看懂」 | `references/beginner-onboarding.md` |
 | 学术论文或 PDF 输入 | `references/paper-navigation.md` |
 | 第 5 步：老妪能解门槛与流畅度自检 | `references/lao-yu-gate.md` |
+| 文本识别评判（readme表达审查 / 词句关键破解 / 语法识别 / 类比真实度 / 复述锚点 / 叙述边界） | `references/text-recognition-judgment.md` |
 | 用户要求做理解测试 / 自测题 | `references/comprehension-check.md` |
 | 卡文、催更、万字长文请求或文件不可读 | `references/author-voice.md`（仅限状态回复，严禁混入正文） |
 | 查看各领域标杆写法 | `references/domain-examples.md` |
 | 用户明确要求长篇展开 | `references/long-article-engine.md` |
 | 内部完整稿排版骨架 | `assets/templates/article-output-template.md` |
 | 交稿呈现规则 (默认折叠) | `references/folded-presentation.md` |
-| 生成空白或 HanLP 智能预填骨架 (可选 Bun) | `bun run generate-template -- -t "<知识点>" -s <style> -l <default\|expand\|long> [--chunks <N>] [--source <文本或文件>] [--hanlp]` |
-| 输入分流与 HanLP 术语/机制预分析 (可选 Bun) | `bun run validate-input -- "<输入>" [--paper] [--kind <auto\|text\|academic-paper>] [--hanlp]` |
-| 交稿前机械与 HanLP 语义/可读性/人味自检 (可选 Bun) | `bun run check-output -- <result.md> --level <default\|expand\|long> --style <style> [--facts <路径>] [--hanlp] [--strict-human-voice] [--baseline-floor] [--chunk <k\|all>] [--deterministic]` |
-| PDF 论文导航、HanLP 事实抽取与评分卡 (可选 Bun) | `bun run evaluate-pdf -- <input.pdf> --workspace <dir> --style <style> [--result <md>] [--facts <json>] [--hanlp]` |
+| 切中观点的关键词筛选、文言文知识库破译与日常/游戏话术映射 (可选 Bun) | `bun run screen-keywords -- "<文本或文件>" [--habit <auto\|gaming\|daily\|workplace>] [--top <N>] [--markdown]` |
+| 生成空白或 HanLP 智能预填骨架 (可选 Bun) | `bun run generate-template -- -t "<知识点>" -s <style> -l <default\|expand\|long> [--chunks <N>] [--source <文本或文件>] [--habit <auto\|gaming\|daily\|workplace>] [--hanlp]` |
+| 输入分流与 HanLP 术语/机制预分析 (可选 Bun) | `bun run validate-input -- "<输入>" [--paper] [--kind <auto\|text\|academic-paper>] [--hanlp] [--text-judgment] [--screen-keywords] [--habit <auto\|gaming\|daily\|workplace>]` |
+| 交稿前机械、极性/方向反转、文本识别评判及目录扫描 (可选 Bun) | `bun run check-output -- <result.md> --level <default\|expand\|long> --style <style> [--facts <路径>] [--hanlp] [--strict-human-voice] [--baseline-floor] [--text-judgment] [--readme-review] [--scan-dir <目录>] [--emit-grammar-marked <path\|->] [--emit-beginner-card <path\|->] [--emit-gist <path\|->] [--habit <auto\|gaming\|daily\|workplace>] [--chunk <k\|all>] [--emit-folded <path\|->] [--emit-annotated <path\|->] [--deterministic]` |
+| PDF 论文导航、图表/公式/伪代码抽取与评分卡 (可选 Bun) | `bun run evaluate-pdf -- <input.pdf> --workspace <dir> --style <style> [--result <md>] [--facts <json>] [--hanlp]` |
+| 离线确定性基准与 A/B/C 对照评测套件 (可选 Bun) | `bun run eval:suite [--deterministic \| --live --workspace <dir> --api-key <key>]` |
 
 ## 转化工作流 (五步法)
 
@@ -142,6 +150,14 @@ metadata:
   - **去 AI 厕纸感与人味检测（`human_voice_score`）**：自动统计单句成段率（拦截「一行一句」）、非人名实体 `·` 符号频次（拦截 `·` 分点与造词）、正文列表行占比、句长变异系数（Burstiness）与 AI 高频套话。
   - **未解释黑话检测（`tok` + `pos` + `ner`）**：识别在正文中直接出现但未在映射表或前文动作铺垫中解释的专业术语。
   - **语义保真度核验（`sts`）**：计算转化正文/知识点校验段落与事实账本 `claim` 的语义文本相似度（STS），解决字面 `includes` 无法识别白话同义改写的问题。
+  - **文本识别评判（`text_recognition_judgment`）**：详见 `references/text-recognition-judgment.md`，下设五项子评判：
+    - **readme表达审查（`readme_expression_review`）**：识别项目文件或说明文档中多表情元素，或分段严重且说明过于标准化的表达，一旦命中即打上 `ai生产` 标签。
+    - **词句关键破解（`micro_sentence_cracker`）**：全局检索两字或三字独立短句（如 `先看看`、`别急` 等指令短句）、设问自答过渡壳、高频「不是…而是…」排比成瘾与伪金句拔高收尾，命中即打上 `ai生产` 标签。
+    - **语法识别（`grammar_inspection`）**：识别主谓宾语序错误、英式思维倒装句、欧化长定语「的」字堆叠、欧化弱被动与无生命复数「们」，自动使用 Markdown 强调标记（`**...**`）提取高亮并生成改写建议。
+    - **类比真实度审查（`analogy_authenticity_review`）**：拦截「术语+人名头衔」（如 `哈希先生`、`皮沃特老师`）等贴标签式伪类比与未落入正文的空转映射。
+    - **外行复述锚点（`layperson_retelling_anchor`）**：自动提取文中因果完整、短促好懂的一句话白话复述锚点并评估复述友好度。
+    - **小白友好度评估（`beginner_friendliness`）**：拦截「其实很简单/显而易见」等居高临下词，检测前 45 字零黑话冷启动、小句工作记忆负荷与日常体感锚点，支持 `--emit-beginner-card <path|->` 导出「小白一秒读懂卡」。
+    - **叙述边界审查（`narrative_boundary_review`）**：拦截「在很久很久以前/阳光透过窗户洒在」等无机制增量的长篇故事注水，识别游戏/日常/职场话术映射锚点，支持 `--emit-gist <path|->` 导出「切中观点·极简白话阐述报告」。
 
 过关后，在内部完整稿末尾补上 `**知识点校验**`：用 1-3 句平实、严谨的技术/学术语言复核核心事实与边界，与正文形成精准对照。
 

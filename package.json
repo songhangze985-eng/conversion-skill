@@ -1,6 +1,6 @@
 {
   "name": "conversion-skill",
-  "version": "2.1.0",
+  "version": "2.5.0",
   "private": true,
   "description": "Optional Bun/TypeScript helpers for conversion-skill. The Markdown skill itself does not require Bun.",
   "type": "module",
@@ -11,7 +11,9 @@
     "validate-input": "bun scripts/validate-input.ts",
     "generate-template": "bun scripts/generate-template.ts",
     "check-output": "bun scripts/check-output.ts",
+    "screen-keywords": "bun scripts/screen-keywords.ts",
     "evaluate-pdf": "bun scripts/evaluate-pdf.ts",
+    "eval:suite": "bun scripts/run-evals.ts",
     "test": "bun test scripts"
   },
   "dependencies": {
