@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.5.0 — 2026-11-07
+
+- 新增**叙述边界设定、自建文言文翻译 JSON 知识库与切中观点的关键词筛选工具**（`references/narrative-boundary-and-gist.md`、`assets/knowledge/classical-chinese-kb.json`、`scripts/screen-keywords.ts`）：
+  - **叙述边界铁律与日常/游戏话术类比映射**：明确通俗易懂不是长篇大论编故事，而是根据用户日常习惯（如 `gaming` 游戏玩家习惯：技能冷却 `CD`、仇恨分摊、副本读档、压枪灵敏度、`LRU` 快捷物品栏；`daily` 日常生活；`workplace` 职场协作）用 1–2 句日常话术精准映射；在 `hanlp-helper.ts` 中新增 `evaluateNarrativeBoundary`，拦截无机制增量的长篇故事环境注水并打上 `长篇剧情注水` 标签。
+  - **自建文言文翻译 JSON 知识库**（`assets/knowledge/classical-chinese-kb.json`）：内置 18 类高频文言立论/判断/被动/反诘句式（带立论信号权重）、45+ 核心文言实词与古今异义防坑词典（如 `劝`、`假`、`卑鄙`、`痛恨`、`牺牲`、`所以`、`虽然`）及 15 篇经典名篇极简白话直译与三栖话术映射。
+  - **切中观点的关键词筛选工具**（`bun run screen-keywords`）：自动区分文言文、重复强调观点的车轱辘文章与常规技术机制，剥离修辞噪音，提取复合靶心关键词，并用最简洁的白话文向读者直述核心要害；联动支持 `validate-input --screen-keywords`、`generate-template --habit` 与 `check-output --emit-gist -`。
+- 新增**零基础小白认知无障碍与一秒读懂卡**（`references/beginner-onboarding.md`、`evaluateBeginnerFriendliness`、`projectBeginnerCard`）：
+  - 确立开口零门槛、情绪零羞辱（拦截 `其实很简单`/`显而易见` 等 11 类居高临下词）、前 45 字零黑话冷启动、小句工作记忆防爆仓（均长 `<= 20` 字）与「还是没太懂」三级降维追问梯，支持 `check-output --emit-beginner-card -` 导出小白秒懂卡。
+- 新增**六维文本识别评判**（`evaluateTextRecognitionJudgment` 与 `references/text-recognition-judgment.md`）并支持 `--scan-dir` 目录批量扫描：
+  - **readme表达审查**（`evaluateReadmeExpression`）：识别项目文件或说明文档中多表情元素，或分段严重且说明过于标准化的表达，自动打上 `ai生产` 标签；支持 `check-output --readme-review` 直接对项目 `README.md` 执行审查。
+  - **词句关键破解**（`evaluateMicroSentenceCracker`）：全局检索两字或三字独立短句（如 `先看看`、`别急` 等指令式表达）、设问自答过渡壳、高频「不是…而是…」排比成瘾与伪金句收尾，自动打上 `ai生产` 标签。
+  - **语法识别**（`evaluateGrammarInspection`）：检测主谓宾语序错误、英式思维倒装句、欧化长定语「的」字堆叠、欧化弱被动与无生命复数「们」，使用 Markdown 强调标记（`**...**`）提取高亮并支持 `--emit-grammar-marked` 导出与 `--fix` 自动纠偏。
+  - **类比真实度审查与外行复述锚点**（`evaluateAnalogyAuthenticity`、`evaluateLaypersonRetelling`）：拦截「术语+人名头衔」式伪类比，自动提取一句话白话复述锚点。
+- 新增语义极性与方向反转核查（`evaluateClaimFidelity`）：识别与事实主张字面高度重合但否定必要条件或反转方向（如「相反 vs 相同」「大于零 vs 等于零」「不可涂改 vs 可以涂改」）的错误转化，防止字面重叠分虚高。
+- 打通 `folded` 交稿与完整稿校验的工程闭环：`check-output` 新增 `--emit-folded <path|->` 与 `--emit-annotated <path|->`，在完整稿通过门禁后直接导出纯净读者正文或带 `〔知识概念〕对应机制。适用边界。` 的追问内联标注视图。
+- 消除标杆样例的「填空式嵌词腔」：扩充 `evaluateExpressionBaseline` 的自然因果衔接识别，重写 `references/domain-examples.md` 五则标杆正文，在保持 100% 严格门禁通过的同时恢复自然叙事呼吸感。
+- 新增 `references/visual-interactive.md`（同构 Mermaid 状态/时序图与可交互探索微件规范）与 `references/socratic-microstep.md`（苏格拉底微步自适应教学规程），并在 `check-output` 中支持 Mermaid 语法校验。
+- 升级 `evaluate-pdf.ts`：支持带编号的自定义学术章节标题识别、自适应章节证据窗口，并自动抽取论文中的图表说明（Figure/Table）、算法伪代码块（Algorithm）与编号公式（Equation）。
+- 新增 `scripts/run-evals.ts`（`bun run eval:suite`）：内置 24 项离线确定性基准套件（覆盖 C01–C12、V01–V03、五则标杆样例、对抗性极性反转与可视化门禁），并支持 `--live` 模式在仓库外独立运行 A/B/C 三组盲测与 Judge 评分。
+
 ## 2.4.0 — 2026-10-17
 
 - 2500 字以上改为分块生成和逐块验收，避免后半篇被全文平均分盖过。
