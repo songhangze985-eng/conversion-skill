@@ -8,9 +8,10 @@
  * are always reported as needing human or model review.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, evaluateHumanVoiceAndAntiSlop, loadCustomDictionary, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions, type HumanVoiceDiagnostics } from "./hanlp-helper";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, evaluateClaimFidelity, evaluateGrammarInspection, evaluateHumanVoiceAndAntiSlop, evaluateTextRecognitionJudgment, loadCustomDictionary, parseHanLPCliOptions, segmentTextLocal, splitSentencesMultilingual, type HanLPDocumentAnalysis, type HanLPOptions, type HumanVoiceDiagnostics, type TextRecognitionJudgment } from "./hanlp-helper";
+import { renderKeywordScreeningMarkdown, screenThesisKeywords, type UserHabitOption } from "./screen-keywords";
 import {
   EXPRESSION_STYLES,
   LEVEL_LIMITS,
@@ -98,6 +99,8 @@ export interface OutputCheckOptions {
   enforceBaselineFloor?: boolean;
   precomputedStoryNlp?: HanLPDocumentAnalysis;
   chunk?: number | "all";
+  textJudgment?: boolean;
+  readmeReview?: boolean;
 }
 
 export interface ExpressionBaselineThresholds {
@@ -148,11 +151,18 @@ export interface HanLPQualityReport {
   avg_dep_tree_depth: number;
   complex_sentences: Array<{ sentence: string; tokenCount: number; treeDepth: number }>;
   unexplained_jargon: string[];
-  fact_semantic_scores: Array<{ fact_id: string; claim_similarity: number; matched_semantically: boolean }>;
+  fact_semantic_scores: Array<{ fact_id: string; claim_similarity: number; matched_semantically: boolean; conflict_reason?: string }>;
+  semantic_conflicts?: Array<{ fact_id: string; reason: string; sentence?: string }>;
   lao_yu_readability_score: number;
   human_voice_diagnostics: HumanVoiceDiagnostics;
   syntax_analysis_source: "hanlp_neural_dep" | "local_heuristic_estimate";
   readability_note: string;
+}
+
+export interface MermaidDiagnostics {
+  block_count: number;
+  valid: boolean;
+  errors: string[];
 }
 
 export interface ChunkCheckReport {
@@ -205,6 +215,8 @@ export interface OutputCheckResult {
   expression_baseline_report?: ExpressionBaselineReport;
   chunk_reports?: ChunkCheckReport[];
   chunk_verdict?: GateVerdict;
+  mermaid_diagnostics?: MermaidDiagnostics;
+  text_recognition_judgment?: TextRecognitionJudgment;
 }
 
 export function readMarkdown(path: string): string {
@@ -543,7 +555,7 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const voice_leaks = VOICE_LEAKS.filter((phrase) => normalizedContains(`${storyBody(markdown)}\n${verificationText(markdown)}`, phrase));
   const ledger = loadFactLedger(options.factsPath, mapping, Boolean(options.requireFacts));
   const hanlpEnabled = Boolean(options.hanlpOptions?.enabled || options.precomputedStoryNlp);
-  const voiceRequested = Boolean(options.strictHumanVoice || options.enforceBaselineFloor || hanlpEnabled);
+  const voiceRequested = Boolean(options.strictHumanVoice || options.enforceBaselineFloor || hanlpEnabled || options.textJudgment || options.readmeReview);
   const stsThreshold = options.stsThreshold ?? 0.62;
   const coverage = factCoverage(
     markdown,
@@ -554,30 +566,41 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
   const leak_ok = voice_leaks.length === 0;
   const has_mapping_bounds = mapping.ok && mapping.rows.length > 0 && mapping.rows.every((row) => Boolean(row.boundary));
   const has_comprehension_section = hasComprehensionSection(markdown);
-  const structure_verdict: GateVerdict = mapping.ok && verify && level_ok && style_ok && leak_ok ? "PASS" : "FAIL";
-  const term_id_coverage_verdict: GateVerdict = coverage.ok ? "PASS" : "FAIL";
+  const structure_verdict: GateVerdict = options.readmeReview && !mapping.ok
+    ? (leak_ok ? "PASS" : "FAIL")
+    : (mapping.ok && verify && level_ok && style_ok && leak_ok ? "PASS" : "FAIL");
+  const term_id_coverage_verdict: GateVerdict = options.readmeReview && !mapping.ok
+    ? "PASS"
+    : (coverage.ok ? "PASS" : "FAIL");
   const comprehension_verdict: ComprehensionVerdict = has_comprehension_section
     ? "STRUCTURE_PRESENT_NEEDS_REVIEW"
     : "NOT_REQUESTED";
   const mechanicalVerdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
+  const text_recognition_judgment = evaluateTextRecognitionJudgment(options.readmeReview ? markdown : (storyBody(markdown) || markdown));
   const hanlp_report = voiceRequested ? buildHanlpReport(markdown, options, ledger, stsThreshold, style) : undefined;
   const humanVoiceFail = Boolean(options.strictHumanVoice && hanlp_report && humanVoiceBlocks(hanlp_report.human_voice_diagnostics, style));
+  const textJudgmentFail = Boolean(
+    (options.textJudgment || options.readmeReview) &&
+      (text_recognition_judgment.overall_ai_produced || text_recognition_judgment.grammar_inspection.has_issues),
+  );
   const localHeuristic = hanlp_report?.syntax_analysis_source === "local_heuristic_estimate";
-  const assistedPass = Boolean(hanlp_report && hanlp_report.lao_yu_readability_score >= 75 && term_id_coverage_verdict === "PASS");
+  const hasSemanticConflicts = Boolean(hanlp_report?.semantic_conflicts && hanlp_report.semantic_conflicts.length > 0);
+  const assistedPass = Boolean(hanlp_report && hanlp_report.lao_yu_readability_score >= 75 && term_id_coverage_verdict === "PASS" && !hasSemanticConflicts);
   const semantic_quality_verdict: ReviewVerdict = !hanlpEnabled || !hanlp_report
     ? "NEEDS_REVIEW"
     : localHeuristic
       ? (assistedPass ? "LOCAL_HEURISTIC_PASS" : "LOCAL_HEURISTIC_WARN")
       : (assistedPass ? "HANLP_NEURAL_PASS" : "HANLP_NEURAL_WARN");
+  const mermaid_diagnostics = validateMermaidBlocks(markdown);
   const expression_baseline_report = options.enforceBaselineFloor && hanlp_report
-    ? evaluateExpressionBaseline(markdown, storyBody(markdown), verificationText(markdown), mapping, hanlp_report.human_voice_diagnostics, hanlp_report.lao_yu_readability_score, style)
+    ? evaluateExpressionBaseline(markdown, storyBody(markdown), verificationText(markdown), mapping, hanlp_report.human_voice_diagnostics, hanlp_report.lao_yu_readability_score, style, hanlp_report.semantic_conflicts, mermaid_diagnostics, text_recognition_judgment)
     : undefined;
   const baselineFail = expression_baseline_report?.baseline_verdict === "FAIL";
   const chunk_reports = options.chunk
     ? evaluateChunksIndependently(storyBody(markdown), style ?? options.expectedStyle ?? "anime", options.hanlpOptions, options.chunk)
     : undefined;
   const chunkFail = Boolean(chunk_reports?.some((report) => report.verdict === "FAIL"));
-  const verdict = mechanicalVerdict === "PASS" && !humanVoiceFail && !baselineFail && !chunkFail ? "PASS" : "FAIL";
+  const verdict = mechanicalVerdict === "PASS" && !humanVoiceFail && !baselineFail && !chunkFail && !textJudgmentFail ? "PASS" : "FAIL";
 
   return {
     has_mapping_table: mapping.ok,
@@ -612,7 +635,138 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
     ...(hanlp_report ? { hanlp_report } : {}),
     ...(expression_baseline_report ? { expression_baseline_verdict: expression_baseline_report.baseline_verdict, expression_baseline_report } : {}),
     ...(chunk_reports ? { chunk_reports, chunk_verdict: chunkFail ? "FAIL" : "PASS" } : {}),
+    ...(mermaid_diagnostics.block_count > 0 ? { mermaid_diagnostics } : {}),
+    text_recognition_judgment,
   };
+}
+
+export function validateMermaidBlocks(markdown: string): MermaidDiagnostics {
+  const blocks = [...markdown.matchAll(/```mermaid\s*\r?\n([\s\S]*?)```/gu)].map((m) => m[1]?.trim() ?? "");
+  if (blocks.length === 0) return { block_count: 0, valid: true, errors: [] };
+  const errors: string[] = [];
+  const validHeaders = /^(?:flowchart|graph|sequenceDiagram|stateDiagram(?:-v2)?|classDiagram|erDiagram|xychart-beta)\b/u;
+  blocks.forEach((block, idx) => {
+    const firstContentLine = block
+      .split(/\r?\n/u)
+      .map((l) => l.trim())
+      .find((l) => l.length > 0 && !l.startsWith("%%"));
+    if (!firstContentLine || !validHeaders.test(firstContentLine)) {
+      errors.push(`Mermaid 块 #${idx + 1} 缺少受支持的图表类型声明 (${firstContentLine ?? "空"})`);
+    }
+    const unquotedHtml = /<br\s*\/?>|<\/?[a-z]+>/iu.test(block);
+    if (unquotedHtml) {
+      errors.push(`Mermaid 块 #${idx + 1} 包含 HTML 标签，请改用纯文本换行或引号包裹节点标签`);
+    }
+  });
+  return {
+    block_count: blocks.length,
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+export function projectFoldedPresentation(markdown: string): string {
+  const titleMatch = /^#\s+(.+)$/mu.exec(markdown);
+  const titleLine = titleMatch ? `# ${titleMatch[1].trim()}` : "";
+  const body = storyBody(markdown)
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  return titleLine ? `${titleLine}\n\n${body}\n` : `${body}\n`;
+}
+
+export function projectAnnotatedPresentation(markdown: string): string {
+  const titleMatch = /^#\s+(.+)$/mu.exec(markdown);
+  const titleLine = titleMatch ? `# ${titleMatch[1].trim()}` : "";
+  const mapping = checkMappingTable(markdown);
+  const body = storyBody(markdown)
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  if (!mapping.ok || mapping.rows.length === 0) {
+    return titleLine ? `${titleLine}\n\n${body}\n` : `${body}\n`;
+  }
+
+  const paragraphs = body.split(/\r?\n\s*\r?\n/u).map((p) => p.trim()).filter(Boolean);
+  const usedRows = new Set<number>();
+  const annotatedParagraphs: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (/^```/u.test(paragraph) || /^#{1,6}\s/u.test(paragraph)) {
+      annotatedParagraphs.push(paragraph);
+      continue;
+    }
+    const sentences = splitSentencesMultilingual(paragraph);
+    const matchedInParagraph: string[] = [];
+
+    for (const sentence of sentences) {
+      mapping.rows.forEach((row, rowIdx) => {
+        if (usedRows.has(rowIdx)) return;
+        const sourceClean = row.source.replace(/^\[F\d+\]\s*/u, "").trim();
+        const storyTokens = segmentTextLocal(row.story).filter((t) => t.trim().length >= 2);
+        const hitsSource = sourceClean.length > 0 && normalizedContains(sentence, sourceClean);
+        const hitsStory = storyTokens.some((tok) => normalizedContains(sentence, tok));
+        if (hitsSource || hitsStory) {
+          usedRows.add(rowIdx);
+          const mech = (row.mechanism ?? row.reason).trim().replace(/[。.]$/u, "");
+          const bound = row.boundary ? `${row.boundary.trim().replace(/[。.]$/u, "")}。` : "";
+          matchedInParagraph.push(`〔${sourceClean}〕${mech}。${bound}`.trim());
+        }
+      });
+    }
+
+    annotatedParagraphs.push(paragraph);
+    for (const note of matchedInParagraph) {
+      annotatedParagraphs.push(note);
+    }
+  }
+
+  const joined = annotatedParagraphs.join("\n\n");
+  return titleLine ? `${titleLine}\n\n${joined}\n` : `${joined}\n`;
+}
+
+export function projectBeginnerCard(markdown: string): string {
+  const titleMatch = /^#\s+(.+)$/mu.exec(markdown);
+  const title = titleMatch ? titleMatch[1].trim() : "知识秒懂卡";
+  const tj = evaluateTextRecognitionJudgment(markdown);
+  const mapping = checkMappingTable(markdown);
+  const body = storyBody(markdown)
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  const firstPara = body.split(/\r?\n\s*\r?\n/u).find((p) => p.trim() && !/^#{1,6}\s/u.test(p.trim())) ?? "";
+  const anchor = tj.layperson_retelling_anchor.best_anchor_sentence || firstPara;
+
+  const lines: string[] = [
+    `# ${title}（小白一秒读懂卡）`,
+    "",
+    `> **一句话大白话（直接拿去跟朋友说）**：${anchor}`,
+    "",
+    "### 1. 先抓直觉：它到底在解决什么麻烦？",
+    firstPara || anchor,
+  ];
+
+  if (mapping.ok && mapping.rows.length > 0) {
+    lines.push("", "### 2. 核心动作对照（不用死背术语，看懂日常动作就行）");
+    for (const row of mapping.rows.slice(0, 4)) {
+      const cleanSource = row.source.replace(/^\[F\d+\]\s*/u, "").trim();
+      lines.push(`- **${row.story.trim()}** → 对应专业里的「**${cleanSource}**」：${(row.mechanism ?? row.reason).trim()}`);
+    }
+    const boundaries = mapping.rows.filter((r) => r.boundary && r.boundary.trim().length > 0);
+    if (boundaries.length > 0) {
+      lines.push("", "### 3. 防坑提醒（别被比喻带偏的地方）");
+      for (const row of boundaries.slice(0, 3)) {
+        const cleanSource = row.source.replace(/^\[F\d+\]\s*/u, "").trim();
+        lines.push(`- 关于「${cleanSource}」：${row.boundary!.trim()}`);
+      }
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function projectConciseGist(markdown: string, habit: UserHabitOption = "auto"): string {
+  const body = storyBody(markdown)
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  const report = screenThesisKeywords(body || markdown, { habit });
+  return renderKeywordScreeningMarkdown(report);
 }
 
 function humanVoiceBlocks(diagnostics: HumanVoiceDiagnostics, style: string | null): boolean {
@@ -635,17 +789,34 @@ function buildHanlpReport(
     .map((entity) => entity.text)
     .filter((text) => text.length >= 2 && normalizedContains(body, text) && mappingArea.length > 0 && !normalizedContains(mappingArea, text)))];
   const maxDepDepth = options.maxDepDepth ?? 7;
+  const verifySection = verificationText(markdown);
+  const combinedTarget = `${body}\n${verifySection}`;
+  const semantic_conflicts: Array<{ fact_id: string; reason: string; sentence?: string }> = [];
   const fact_semantic_scores = ledger.facts.map((fact) => {
-    const claimSimilarity = fact.claim ? computeClaimSimilarity(body, verificationText(markdown), fact.claim, dict) : 0;
+    const fidelity = fact.claim ? evaluateClaimFidelity(combinedTarget, fact.claim, dict) : undefined;
+    const claimSimilarity = fidelity
+      ? (fidelity.polarityConflict || fidelity.directionConflict
+          ? fidelity.effectiveSimilarity
+          : Math.max(fidelity.effectiveSimilarity, normalizedContains(combinedTarget, fact.claim) ? 1 : 0))
+      : 0;
+    if (fidelity?.conflictReason) {
+      semantic_conflicts.push({
+        fact_id: fact.id,
+        reason: fidelity.conflictReason,
+        ...(fidelity.matchedSentence ? { sentence: fidelity.matchedSentence } : {}),
+      });
+    }
     return {
       fact_id: fact.id,
       claim_similarity: claimSimilarity,
-      matched_semantically: claimSimilarity >= stsThreshold || normalizedContains(`${body}\n${verificationText(markdown)}`, fact.id),
+      matched_semantically: !fidelity?.conflictReason && (claimSimilarity >= stsThreshold || normalizedContains(combinedTarget, fact.id)),
+      ...(fidelity?.conflictReason ? { conflict_reason: fidelity.conflictReason } : {}),
     };
   });
   const depthPenalty = Math.max(0, (nlp.depDiagnostics.avgTreeDepth - 4) * 8);
   const complexPenalty = nlp.depDiagnostics.complexSentences.filter((sentence) => sentence.treeDepth > maxDepDepth).length * 6;
   const jargonPenalty = Math.min(20, unexplained.length * 4);
+  const conflictPenalty = semantic_conflicts.length * 18;
   return {
     backend: nlp.backendUsed,
     story_token_count: hanlpTokenCount(body, dict),
@@ -654,7 +825,8 @@ function buildHanlpReport(
     complex_sentences: nlp.depDiagnostics.complexSentences,
     unexplained_jargon: unexplained,
     fact_semantic_scores,
-    lao_yu_readability_score: Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty - jargonPenalty))),
+    ...(semantic_conflicts.length > 0 ? { semantic_conflicts } : {}),
+    lao_yu_readability_score: Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty - jargonPenalty - conflictPenalty))),
     human_voice_diagnostics: evaluateHumanVoiceAndAntiSlop(body, nlp, style ?? options.expectedStyle ?? "anime"),
     syntax_analysis_source: nlp.backendUsed === "local-fallback" ? "local_heuristic_estimate" : "hanlp_neural_dep",
     readability_note: nlp.backendUsed === "local-fallback"
@@ -666,10 +838,17 @@ function buildHanlpReport(
 export function normalizeOutputMarkdown(markdown: string): string {
   let text = markdown.replace(/\r\n/g, "\n").replace(/\u00ad/g, "");
   const clicheReplacements: Array<[RegExp, string]> = [
-    [/(?:^|(?<=[。！？\n]\s*))(?:简单来说|换句话说|总而言之|综上所述|值得注意的是|需要指出的是|众所周知|不言而喻)[，,：:\s]+/gm, ""],
+    [/(?:^|(?<=[。！？\n]\s*))(?:简单来说|换句话说|总而言之|综上所述|值得注意的是|需要指出的是|众所周知|不言而喻|其实很简单|显而易见|不难发现|不难理解|不难看出)[，,：:\s]+/gm, ""],
     [/(?:^|(?<=[。！？\n]\s*))让我们(?:先)?(?:来看看|想象一下)[，,：:\s]*/gm, ""],
+    [/(?:^|(?<=[。！？\n]\s*))(?:先别急|别着急|先看看|别急|别慌|看好了|听我说)[，,。！!\s]+/gm, ""],
   ];
   for (const [pattern, replacement] of clicheReplacements) text = text.replace(pattern, replacement);
+  const grammar = evaluateGrammarInspection(text);
+  for (const issue of grammar.issues) {
+    if (issue.suggestion && text.includes(issue.sentence)) {
+      text = text.split(issue.sentence).join(issue.suggestion);
+    }
+  }
   const styleMatch = text.match(/^>\s*表达风格[：:]\s*`?([a-z-]+)`?/m);
   if (styleMatch?.[1] === "verse") return text;
   const detailsMatch = text.match(/<details[\s\S]*?<\/details>/i);
@@ -684,7 +863,7 @@ export function normalizeOutputMarkdown(markdown: string): string {
   const merged: string[] = [];
   let buffer = "";
   for (const paragraph of rawStory.split(/\n\s*\n/).map((item) => item.trim()).filter(Boolean)) {
-    if (/^#{1,6}\s/u.test(paragraph) || /^>\s/u.test(paragraph) || /^\|.*\|$/u.test(paragraph)) {
+    if (/^#{1,6}\s/u.test(paragraph) || /^>\s/u.test(paragraph) || /^\|.*\|$/u.test(paragraph) || /^```/u.test(paragraph)) {
       if (buffer) merged.push(buffer);
       buffer = "";
       merged.push(paragraph);
@@ -714,10 +893,13 @@ function evaluateExpressionBaseline(
   humanVoice: HumanVoiceDiagnostics,
   readabilityScore: number,
   style: string | null,
+  semanticConflicts?: Array<{ fact_id: string; reason: string; sentence?: string }>,
+  mermaidDiagnostics?: MermaidDiagnostics,
+  textJudgment?: TextRecognitionJudgment,
 ): ExpressionBaselineReport {
   const thresholds = DEFAULT_EXPRESSION_BASELINE;
   const violations: string[] = [];
-  const prose = body.replace(/<!--[\s\S]*?-->/g, "");
+  const prose = body.replace(/```[\s\S]*?```/g, "").replace(/<!--[\s\S]*?-->/g, "");
   const paragraphs = prose.split(/\r?\n\s*\r?\n/u).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph && !/^#{1,6}\s/u.test(paragraph));
   const sentenceCount = Math.max(1, prose.split(/[。！？!?]/u).filter((sentence) => sentence.trim().length > 0).length);
   const avgSentences = paragraphs.length > 0 ? Number((sentenceCount / paragraphs.length).toFixed(2)) : 0;
@@ -726,10 +908,10 @@ function evaluateExpressionBaseline(
   const boundaryRows = mapping.rows.filter((row) => (row.boundary ?? "").trim().length >= thresholds.minBoundaryCellChars && !/(?:待填|占位|TBD|TODO|^无$|^略$)/iu.test(row.boundary ?? ""));
   const combined = `${prose}\n${verifySection}`;
   const stages = [
-    /(?:当|遇到|一旦|如果|为了|痛点|卡在|需要)/u.test(combined) ? "trigger" : "",
-    /(?:先|再|接着|通过|打分|转换|选出|分成)/u.test(combined) ? "action" : "",
-    /(?:但是|然而|限制|代价|边界|风险|只对|失效|更像)/u.test(combined) ? "constraint" : "",
-    /(?:最终|结果|导致|提高|降低|变成|因此)/u.test(combined) ? "outcome" : "",
+    /(?:当|遇到|一旦|如果|若|要是|每当|面对|起初|还没|原本|为了|痛点|卡在|需要|要|想)/u.test(combined) ? "trigger" : "",
+    /(?:先|再|接着|随后|通过|打分|转换|选出|分成|点|选|算|抄|画|标|扣|比|把|按|照|沿)/u.test(combined) ? "action" : "",
+    /(?:但是|然而|不过|但|限制|代价|边界|风险|只对|失效|更像|不能|不可|必须|只|除非|直到|没法|否则|前提)/u.test(combined) ? "constraint" : "",
+    /(?:最终|结果|导致|提高|降低|变成|因此|所以|从此|才|就定|锁死|生效|排好|清掉|更新|重排)/u.test(combined) ? "outcome" : "",
   ].filter(Boolean);
   const verifyChars = markdownWordCount(verifySection);
   if (style !== "verse") {
@@ -747,6 +929,35 @@ function evaluateExpressionBaseline(
   if (stages.length < thresholds.minCausalStageCount) violations.push(`[最低表达基线·机制因果链残缺] 仅覆盖 ${stages.length}/4 个阶段`);
   if (humanVoice.humanVoiceScore < thresholds.minHumanVoiceScore) violations.push(`[最低表达基线·人味分数未达标] 当前 ${humanVoice.humanVoiceScore} 分`);
   if (readabilityScore < thresholds.minReadabilityScore) violations.push(`[最低表达基线·可读性未达标] 当前 ${readabilityScore} 分`);
+  if (semanticConflicts && semanticConflicts.length > 0) {
+    for (const conflict of semanticConflicts) {
+      violations.push(`[最低表达基线·事实极性或方向反转] ${conflict.fact_id}: ${conflict.reason}`);
+    }
+  }
+  if (mermaidDiagnostics && !mermaidDiagnostics.valid) {
+    for (const err of mermaidDiagnostics.errors) {
+      violations.push(`[最低表达基线·可视化语法错误] ${err}`);
+    }
+  }
+  if (textJudgment) {
+    if (textJudgment.readme_expression_review.is_ai_produced) {
+      violations.push(`[最低表达基线·readme表达审查] 命中「${textJudgment.readme_expression_review.label}」标签：${textJudgment.readme_expression_review.reasons.join("；")}`);
+    }
+    if (textJudgment.micro_sentence_cracker.is_ai_produced) {
+      violations.push(`[最低表达基线·词句关键破解] 命中「${textJudgment.micro_sentence_cracker.label}」标签：${textJudgment.micro_sentence_cracker.reasons.slice(0, 3).join("；")}`);
+    }
+    if (textJudgment.analogy_authenticity_review.is_ai_produced) {
+      violations.push(`[最低表达基线·类比真实度审查] 命中「${textJudgment.analogy_authenticity_review.label}」标签：${textJudgment.analogy_authenticity_review.reasons.join("；")}`);
+    }
+    if (textJudgment.narrative_boundary_review.story_bloat_detected) {
+      violations.push(`[最低表达基线·叙述边界越界] ${textJudgment.narrative_boundary_review.reasons.join("；")}`);
+    }
+    if (textJudgment.grammar_inspection.has_issues) {
+      for (const issue of textJudgment.grammar_inspection.issues) {
+        violations.push(`[最低表达基线·语法识别] ${issue.markdown_emphasized} (${issue.reason})`);
+      }
+    }
+  }
   return {
     baseline_verdict: violations.length === 0 ? "PASS" : "FAIL",
     thresholds,
@@ -760,6 +971,7 @@ function evaluateExpressionBaseline(
       causal_stages_covered: stages,
       human_voice_score: humanVoice.humanVoiceScore,
       readability_score: readabilityScore,
+      ...(textJudgment ? { text_recognition_labels: textJudgment.labels } : {}),
     },
     violations,
   };
@@ -767,11 +979,6 @@ function evaluateExpressionBaseline(
 
 function mappingRowsText(markdown: string): string {
   return markdown.split(/\r?\n/u).filter((line) => line.trim().startsWith("|")).join("\n");
-}
-
-function computeClaimSimilarity(body: string, verification: string, claim: string, dict: ReturnType<typeof loadCustomDictionary>): number {
-  const target = `${body}\n${verification}`;
-  return Math.max(semanticContains(target, claim, 0, dict).similarity, normalizedContains(target, claim) ? 1 : 0);
 }
 
 function reviewLabel(verdict: ReviewVerdict | ComprehensionVerdict): string {
@@ -800,6 +1007,41 @@ function render(result: OutputCheckResult): string {
     `  语义质量评估: ${reviewLabel(result.semantic_quality_verdict)}`,
     `  用户理解验证: ${reviewLabel(result.comprehension_verdict)}`,
   ];
+  if (result.text_recognition_judgment) {
+    const tj = result.text_recognition_judgment;
+    const tagText = tj.labels.length > 0 ? tj.labels.join("、") : "正常";
+    lines.push(`  文本识别评判: ${tagText}`);
+    lines.push(
+      `    readme表达审查: [${tj.readme_expression_review.label}]${tj.readme_expression_review.reasons.length > 0 ? ` ${tj.readme_expression_review.reasons.join("；")}` : " 未发现多表情或碎片化标准腔"}`,
+    );
+    lines.push(
+      `    词句关键破解: [${tj.micro_sentence_cracker.label}]${tj.micro_sentence_cracker.reasons.length > 0 ? ` ${tj.micro_sentence_cracker.reasons.slice(0, 4).join("；")}` : " 未发现两三字独立短句、设问过渡壳或排比成瘾"}`,
+    );
+    lines.push(
+      `    类比真实度审查: [${tj.analogy_authenticity_review.label}]${tj.analogy_authenticity_review.reasons.length > 0 ? ` ${tj.analogy_authenticity_review.reasons.join("；")}` : " 未发现术语贴标签伪角色或映射脱节"}`,
+    );
+    lines.push(
+      `    外行复述锚点: 复述友好度 ${tj.layperson_retelling_anchor.retellability_score}${tj.layperson_retelling_anchor.best_anchor_sentence ? `（候选锚点：「${tj.layperson_retelling_anchor.best_anchor_sentence.slice(0, 48)}${tj.layperson_retelling_anchor.best_anchor_sentence.length > 48 ? "…" : ""}」）` : ""}`,
+    );
+    lines.push(
+      `    小白友好度: ${tj.beginner_friendliness.beginner_score}（小句均长 ${tj.beginner_friendliness.avg_clause_chars}字，开篇零黑话=${tj.beginner_friendliness.opening_jargon_free ? "是" : "否"}，具象体感词=${tj.beginner_friendliness.concrete_sensory_signals}处）`,
+    );
+    for (const reason of tj.beginner_friendliness.reasons) {
+      lines.push(`      - ${reason}`);
+    }
+    lines.push(
+      `    叙述边界审查: ${tj.narrative_boundary_review.within_boundary ? "OK" : "发现长篇剧情注水"}（精炼度 ${tj.narrative_boundary_review.conciseness_score}，日常/游戏话术域=${tj.narrative_boundary_review.habit_lingo_domains.join("/") || "通用"}）`,
+    );
+    for (const reason of tj.narrative_boundary_review.reasons) {
+      lines.push(`      - ${reason}`);
+    }
+    lines.push(
+      `    语法识别: ${tj.grammar_inspection.has_issues ? `发现 ${tj.grammar_inspection.issue_count} 处语序/倒装/欧化问题` : "OK"}`,
+    );
+    for (const issue of tj.grammar_inspection.issues) {
+      lines.push(`      - ${issue.markdown_emphasized} (${issue.reason} -> 建议：${issue.suggestion})`);
+    }
+  }
   if (result.expression_baseline_report) {
     lines.push(`  最低表达水平线: ${result.expression_baseline_report.baseline_verdict}`);
     for (const violation of result.expression_baseline_report.violations) lines.push(`    ${violation}`);
@@ -810,6 +1052,11 @@ function render(result: OutputCheckResult): string {
     for (const warning of result.hanlp_report.human_voice_diagnostics.issue1Warnings) lines.push(`    ${warning}`);
     if (result.hanlp_report.unexplained_jargon.length > 0) {
       lines.push(`    未铺垫术语: ${result.hanlp_report.unexplained_jargon.slice(0, 5).join("、")}`);
+    }
+    if (result.hanlp_report.semantic_conflicts && result.hanlp_report.semantic_conflicts.length > 0) {
+      for (const conflict of result.hanlp_report.semantic_conflicts) {
+        lines.push(`    语义冲突预警: [${conflict.fact_id}] ${conflict.reason}`);
+      }
     }
   }
   if (result.chunk_reports) {
@@ -834,13 +1081,101 @@ export function renderDeterministic(result: OutputCheckResult): string {
   return `转换结果校验 verdict=${result.verdict} level=${result.level} words=${result.word_count}${chunkPart}${failPart}`;
 }
 
-function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n\n选项：\n  -f, --file <路径>\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用 14 项最低表达水平线验收，未过线则总结论改为 FAIL\n  --fix                          落盘前去掉套话前缀、行首圆点，并合并过短段落\n  --chunk <k|all>                按二级标题逐块验收，任一块失败则总结论为 FAIL\n  --deterministic                人类可读输出收成一行；JSON 键序固定\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+export interface DirectoryScanFileEntry {
+  file: string;
+  verdict: GateVerdict;
+  labels: string[];
+  readme_label: string;
+  micro_sentence_label: string;
+  analogy_label: string;
+  grammar_issue_count: number;
+  retellability_score: number;
+  reasons: string[];
 }
 
-function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean; enforceBaselineFloor: boolean; fix: boolean; chunk?: number | "all"; deterministic: boolean } {
+export interface DirectoryScanReport {
+  directory: string;
+  total_files: number;
+  passed_files: number;
+  flagged_files: number;
+  verdict: GateVerdict;
+  files: DirectoryScanFileEntry[];
+}
+
+export function scanDirectoryTextJudgment(dirPath: string): DirectoryScanReport {
+  const rootDir = resolve(dirPath);
+  const mdFiles: string[] = [];
+  const walk = (curr: string): void => {
+    for (const entry of readdirSync(curr)) {
+      if (entry.startsWith(".") || entry === "node_modules") continue;
+      const full = join(curr, entry);
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full);
+      else if (entry.endsWith(".md")) mdFiles.push(full);
+    }
+  };
+  walk(rootDir);
+  mdFiles.sort();
+
+  const files: DirectoryScanFileEntry[] = mdFiles.map((fullPath) => {
+    const raw = readFileSync(fullPath, "utf8");
+    const tj = evaluateTextRecognitionJudgment(raw);
+    const hasIssues = tj.overall_ai_produced || tj.grammar_inspection.has_issues;
+    const reasons = [
+      ...tj.readme_expression_review.reasons,
+      ...tj.micro_sentence_cracker.reasons,
+      ...tj.analogy_authenticity_review.reasons,
+      ...tj.grammar_inspection.issues.map((i) => `${i.markdown_emphasized} (${i.reason})`),
+    ];
+    return {
+      file: relative(rootDir, fullPath) || fullPath,
+      verdict: hasIssues ? "FAIL" : "PASS",
+      labels: tj.labels.length > 0 ? tj.labels : ["正常"],
+      readme_label: tj.readme_expression_review.label,
+      micro_sentence_label: tj.micro_sentence_cracker.label,
+      analogy_label: tj.analogy_authenticity_review.label,
+      grammar_issue_count: tj.grammar_inspection.issue_count,
+      retellability_score: tj.layperson_retelling_anchor.retellability_score,
+      reasons,
+    };
+  });
+
+  const passed_files = files.filter((f) => f.verdict === "PASS").length;
+  const flagged_files = files.length - passed_files;
+  return {
+    directory: rootDir,
+    total_files: files.length,
+    passed_files,
+    flagged_files,
+    verdict: flagged_files === 0 ? "PASS" : "FAIL",
+    files,
+  };
+}
+
+function renderDirectoryScan(report: DirectoryScanReport): string {
+  const lines = [
+    `项目目录文本识别评判扫描 (${report.directory})`,
+    `  总计: ${report.passed_files}/${report.total_files} 正常，${report.flagged_files} 命中标签 (${report.verdict})`,
+  ];
+  for (const item of report.files) {
+    lines.push(
+      `  [${item.verdict}] ${item.file} — 标签: ${item.labels.join("、")} | 语法问题: ${item.grammar_issue_count} | 复述友好度: ${item.retellability_score}`,
+    );
+    for (const r of item.reasons) {
+      lines.push(`    - ${r}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function help(): void {
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n  bun run check-output -- result.md --fix --baseline-floor --strict-human-voice --emit-folded -\n  bun run check-output -- README.md --readme-review --emit-grammar-marked -\n  bun run check-output -- --scan-dir references\n\n选项：\n  -f, --file <路径>\n  --scan-dir <目录路径>          批量扫描项目目录下所有 Markdown 文件，输出文本识别评判汇总报告\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用最低表达水平线（含文本识别评判）验收，未过线则总结论改为 FAIL\n  --text-judgment                启用文本识别评判门禁（readme表达审查 + 词句关键破解 + 类比真实度审查 + 语法识别），命中“ai生产”或语法错误则 FAIL\n  --readme-review                项目文件/README 审查模式：免除转换映射表要求，直接对文档执行文本识别评判门禁\n  --emit-grammar-marked <路径|-> 导出对主谓宾语序错误/英式倒装句/欧化句添加 Markdown 强调标记（**...**）后的全文\n  --fix                          落盘前去掉套话前缀、行首圆点、两三字指令短句，修正英式倒装与语序并合并过短段落\n  --chunk <k|all>                按二级标题逐块验收，任一块失败则总结论为 FAIL\n  --emit-folded <路径|->         校验通过后导出折叠呈现版（仅标题与干净正文，供直接交付读者）\n  --emit-annotated <路径|->      导出带追问内联标注的呈现版（格式：〔概念〕对应机制。适用边界。）\n  --emit-beginner-card <路径|->  导出面向零基础读者与低理解力人群的「小白一秒读懂卡」\n  --emit-gist <路径|->           导出切中观点的「极简白话与日常/游戏话术阐述报告」（适用于文言文、重复观点文章及快速抓主旨）\n  --habit <auto|gaming|daily|workplace> 指定导出话术映射时的用户习惯域（默认 auto）\n  --deterministic                人类可读输出收成一行；JSON 键序固定\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  文本识别评判          下辖 readme表达审查、词句关键破解、类比真实度审查（打“ai生产”标签）、外行复述锚点与语法识别（**强调标记**提取）\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+}
+
+function parseArgs(argv: string[]): { file?: string; scanDir?: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean; enforceBaselineFloor: boolean; fix: boolean; chunk?: number | "all"; deterministic: boolean; emitFolded?: string; emitAnnotated?: string; emitBeginnerCard?: string; emitGist?: string; habit: UserHabitOption; textJudgment: boolean; readmeReview: boolean; emitGrammarMarked?: string } {
   const hanlp = parseHanLPCliOptions(argv);
   let file: string | undefined;
+  let scanDir: string | undefined;
   let level: OutputLevel = "default";
   let factsPath: string | undefined;
   let expectedStyle: ExpressionStyle | undefined;
@@ -853,6 +1188,14 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
   let fix = false;
   let chunk: number | "all" | undefined;
   let deterministic = false;
+  let emitFolded: string | undefined;
+  let emitAnnotated: string | undefined;
+  let emitBeginnerCard: string | undefined;
+  let emitGist: string | undefined;
+  let habit: UserHabitOption = "auto";
+  let textJudgment = false;
+  let readmeReview = false;
+  let emitGrammarMarked: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -876,6 +1219,12 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
     if (arg === "-f" || arg === "--file") {
       file = argv[index + 1];
       if (!file) usageError(`${arg} 需要路径`);
+      index += 1;
+      continue;
+    }
+    if (arg === "--scan-dir") {
+      scanDir = argv[index + 1];
+      if (!scanDir) usageError("--scan-dir 需要目录路径");
       index += 1;
       continue;
     }
@@ -907,12 +1256,65 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
       enforceBaselineFloor = true;
       continue;
     }
+    if (arg === "--text-judgment") {
+      textJudgment = true;
+      continue;
+    }
+    if (arg === "--readme-review") {
+      readmeReview = true;
+      textJudgment = true;
+      continue;
+    }
+    if (arg === "--emit-grammar-marked") {
+      const value = argv[index + 1];
+      if (!value) usageError("--emit-grammar-marked 需要输出路径或 -");
+      emitGrammarMarked = value;
+      index += 1;
+      continue;
+    }
     if (arg === "--fix") {
       fix = true;
       continue;
     }
     if (arg === "--deterministic") {
       deterministic = true;
+      continue;
+    }
+    if (arg === "--emit-folded") {
+      const value = argv[index + 1];
+      if (!value) usageError("--emit-folded 需要输出路径或 -");
+      emitFolded = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--emit-annotated") {
+      const value = argv[index + 1];
+      if (!value) usageError("--emit-annotated 需要输出路径或 -");
+      emitAnnotated = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--emit-beginner-card") {
+      const value = argv[index + 1];
+      if (!value) usageError("--emit-beginner-card 需要输出路径或 -");
+      emitBeginnerCard = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--emit-gist") {
+      const value = argv[index + 1];
+      if (!value) usageError("--emit-gist 需要输出路径或 -");
+      emitGist = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--habit") {
+      const value = argv[index + 1] as UserHabitOption | undefined;
+      if (!value || !["auto", "gaming", "daily", "workplace"].includes(value)) {
+        usageError("--habit 只能是 auto、gaming、daily 或 workplace");
+      }
+      habit = value;
+      index += 1;
       continue;
     }
     if (arg === "--chunk") {
@@ -945,16 +1347,23 @@ function parseArgs(argv: string[]): { file: string; level: OutputLevel; factsPat
     if (file) usageError("只接受一个 Markdown 路径");
     file = arg;
   }
-  if (!file) usageError("请提供 Markdown 路径");
-  return { file: resolve(file), level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice, enforceBaselineFloor, fix, chunk, deterministic };
+  if (!file && !scanDir) usageError("请提供 Markdown 路径或 --scan-dir <目录路径>");
+  return { file: file ? resolve(file) : undefined, scanDir: scanDir ? resolve(scanDir) : undefined, level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice, enforceBaselineFloor, fix, chunk, deterministic, emitFolded, emitAnnotated, emitBeginnerCard, emitGist, habit, textJudgment, readmeReview, emitGrammarMarked };
 }
 
 if (import.meta.main) {
   const args = parseArgs(Bun.argv.slice(2));
   const run = async (): Promise<void> => {
-    const original = readMarkdown(args.file);
+    if (args.scanDir) {
+      const scanReport = scanDirectoryTextJudgment(args.scanDir);
+      if (args.json) process.stdout.write(args.deterministic ? stableJson(scanReport) : `${JSON.stringify(scanReport, null, 2)}\n`);
+      else process.stdout.write(`${renderDirectoryScan(scanReport)}\n`);
+      process.exit(scanReport.verdict === "PASS" ? 0 : 1);
+    }
+    const targetFile = args.file!;
+    const original = readMarkdown(targetFile);
     const markdown = args.fix ? normalizeOutputMarkdown(original) : original;
-    if (args.fix && markdown !== original) writeFileSync(args.file, markdown.endsWith("\n") ? markdown : `${markdown}\n`);
+    if (args.fix && markdown !== original) writeFileSync(targetFile, markdown.endsWith("\n") ? markdown : `${markdown}\n`);
     const precomputedStoryNlp = args.hanlp.enabled ? await analyzeWithHanLP(storyBody(markdown) || markdown, args.hanlp) : undefined;
     const result = analyzeMarkdown(markdown, {
       level: args.level,
@@ -968,7 +1377,49 @@ if (import.meta.main) {
       enforceBaselineFloor: args.enforceBaselineFloor,
       precomputedStoryNlp,
       chunk: args.chunk,
+      textJudgment: args.textJudgment,
+      readmeReview: args.readmeReview,
     });
+    if (args.emitGrammarMarked && result.text_recognition_judgment) {
+      const marked = result.text_recognition_judgment.grammar_inspection.annotated_markdown;
+      if (args.emitGrammarMarked === "-") {
+        process.stdout.write(marked.endsWith("\n") ? marked : `${marked}\n`);
+        process.exit(0);
+      }
+      writeFileSync(resolve(args.emitGrammarMarked), marked.endsWith("\n") ? marked : `${marked}\n`, "utf8");
+    }
+    if (args.emitFolded && result.verdict === "PASS") {
+      const folded = projectFoldedPresentation(markdown);
+      if (args.emitFolded === "-") {
+        process.stdout.write(folded);
+        process.exit(0);
+      }
+      writeFileSync(resolve(args.emitFolded), folded, "utf8");
+    }
+    if (args.emitAnnotated && result.verdict === "PASS") {
+      const annotated = projectAnnotatedPresentation(markdown);
+      if (args.emitAnnotated === "-") {
+        process.stdout.write(annotated);
+        process.exit(0);
+      }
+      writeFileSync(resolve(args.emitAnnotated), annotated, "utf8");
+    }
+    if (args.emitBeginnerCard) {
+      const card = projectBeginnerCard(markdown);
+      if (args.emitBeginnerCard === "-") {
+        process.stdout.write(card);
+        process.exit(0);
+      }
+      writeFileSync(resolve(args.emitBeginnerCard), card, "utf8");
+    }
+    if (args.emitGist) {
+      const gist = projectConciseGist(markdown, args.habit);
+      if (args.emitGist === "-") {
+        process.stdout.write(gist);
+        process.exit(0);
+      }
+      writeFileSync(resolve(args.emitGist), gist, "utf8");
+    }
     if (args.json) process.stdout.write(args.deterministic ? stableJson(result) : `${JSON.stringify(result, null, 2)}\n`);
     else process.stdout.write(`${args.deterministic ? renderDeterministic(result) : render(result)}\n`);
     process.exit(result.verdict === "PASS" ? 0 : 1);
