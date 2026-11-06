@@ -59,6 +59,7 @@ export async function readStdIn(): Promise<string> {
 
 export function markdownWordCount(markdown: string): number {
   const text = markdown
+    .replace(/```[\s\S]*?```/g, "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<[^>]+>/g, "")
     .replace(/^#{1,6}\s+/gm, "")

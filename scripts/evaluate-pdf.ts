@@ -11,25 +11,32 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import { analyzeMarkdown, readMarkdown, type FactLedger } from "./check-output";
 import { analyzeWithHanLP, consumeHanlpArg, parseHanLPCliOptions, type HanLPDocumentAnalysis, type HanLPOptions } from "./hanlp-helper";
 import { isExpressionStyle, relativeIsInside, stableJson, type ExpressionStyle, usageError } from "./shared";
 
-type NavigationKind = "title" | "abstract" | "results" | "method" | "conclusion";
+export type NavigationKind = "title" | "abstract" | "results" | "method" | "conclusion" | "algorithm" | "figure";
 
-interface PageText {
+export interface PageText {
   page: number;
   text: string;
   characters: number;
 }
 
-interface NavigationEntry {
+export interface NavigationEntry {
   id: string;
   kind: NavigationKind;
   page: number;
   section: string;
   evidence: string;
+}
+
+export interface PaperArtifact {
+  id: string;
+  kind: "figure" | "table" | "algorithm" | "equation";
+  page: number;
+  label: string;
+  snippet: string;
 }
 
 interface PdfEvaluatorArgs {
@@ -45,11 +52,20 @@ interface PdfEvaluatorArgs {
   deterministic: boolean;
 }
 
-const SECTION_PATTERNS: Record<Exclude<NavigationKind, "title">, RegExp> = {
-  abstract: /(?:^|\n)\s*(?:摘要|abstract)\b/imu,
-  results: /(?:^|\n)\s*(?:结果|results)\b/imu,
-  method: /(?:^|\n)\s*(?:材料与方法|材料和方法|方法|研究方法|方法论|materials and methods|method(?:ology)?)\b/imu,
-  conclusion: /(?:^|\n)\s*(?:结论|讨论与结论|讨论|conclusion|conclusions|discussion)\b/imu,
+const HEADING_PREFIX = String.raw`(?:(?:\d+(?:\.\d+)*|[IVX]{1,5}|[一二三四五六七八九十]+)[.、:\s]+)?`;
+
+const SECTION_PATTERNS: Record<"abstract" | "results" | "method" | "conclusion", RegExp> = {
+  abstract: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:摘\s*要|abstract)\b`, "imu"),
+  results: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:实验结果与分析|实验与结果|实验结果|实验评估|结果|experiments?(?:\s+and\s+results)?|results(?:\s+and\s+analysis)?|empirical\s+evaluation|evaluation)\b`, "imu"),
+  method: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:材料与方法|材料和方法|研究方法|方法论|模型架构|算法设计|核心机制|系统设计|方法|materials\s+and\s+methods|method(?:ology|s)?|proposed\s+(?:method|approach|framework|model|architecture|algorithm)|technical\s+approach|framework|architecture|model\s+design)\b`, "imu"),
+  conclusion: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:讨论与结论|总结与展望|结论与展望|结论|讨论|conclusion(?:s)?(?:\s+and\s+future\s+work)?|discussion(?:\s+and\s+conclusion)?|summary\s+and\s+conclusion)\b`, "imu"),
+};
+
+const SECTION_MAX_CHARS: Record<"abstract" | "results" | "method" | "conclusion", number> = {
+  abstract: 1000,
+  method: 1200,
+  results: 900,
+  conclusion: 800,
 };
 
 function help(): void {
@@ -202,6 +218,7 @@ function normalizePdfText(raw: string): string {
 }
 
 async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageCount: number }> {
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data = new Uint8Array(await readFile(pdfPath));
   const loadingTask = pdfjsLib.getDocument({ data, disableWorker: true, useWorkerFetch: false });
   const document = await loadingTask.promise;
@@ -254,9 +271,15 @@ function isRunningHeaderOrBannerLine(line: string): boolean {
   return false;
 }
 
-function truncateEvidence(text: string, maximum = 420): string {
+export function truncateEvidence(text: string, maximum = 420): string {
   const compact = text.replace(/\s+/gu, " ").trim();
-  return compact.length <= maximum ? compact : `${compact.slice(0, maximum).trimEnd()}…`;
+  if (compact.length <= maximum) return compact;
+  const slice = compact.slice(0, maximum);
+  const lastPeriod = Math.max(slice.lastIndexOf("。"), slice.lastIndexOf(". "), slice.lastIndexOf("；"), slice.lastIndexOf("; "));
+  if (lastPeriod >= Math.floor(maximum * 0.65)) {
+    return slice.slice(0, lastPeriod + 1).trimEnd();
+  }
+  return `${slice.trimEnd()}…`;
 }
 
 function titleEvidence(pages: PageText[]): NavigationEntry | undefined {
@@ -280,7 +303,7 @@ function titleEvidence(pages: PageText[]): NavigationEntry | undefined {
 function untitledAbstract(pages: PageText[]): NavigationEntry | undefined {
   const first = pages[0];
   if (!first?.text || sectionEvidence("abstract", pages)) return undefined;
-  const intro = /\n\s*introduction\b/iu.exec(first.text);
+  const intro = /\n\s*(?:(?:\d+\.?|I\.?)\s+)?introduction\b/iu.exec(first.text);
   if (!intro || intro.index === undefined) return undefined;
   const before = first.text.slice(0, intro.index);
   const lines = before.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.length > 80 && !isRunningHeaderOrBannerLine(line));
@@ -289,16 +312,17 @@ function untitledAbstract(pages: PageText[]): NavigationEntry | undefined {
   return { id: "", kind: "abstract", page: first.page, section: "abstract", evidence: truncateEvidence(body, 1200) };
 }
 
-function sectionEvidence(kind: Exclude<NavigationKind, "title">, pages: PageText[]): NavigationEntry | undefined {
+function sectionEvidence(kind: "abstract" | "results" | "method" | "conclusion", pages: PageText[]): NavigationEntry | undefined {
   const pattern = SECTION_PATTERNS[kind];
+  const maxChars = SECTION_MAX_CHARS[kind];
   const page = pages.find((item) => item.text.split(/\r?\n/u).some((line) => {
     const trimmed = line.trim();
-    return trimmed.length <= 48 && pattern.test(`\n${trimmed}`);
+    return trimmed.length <= 68 && pattern.test(`\n${trimmed}`);
   }));
   if (!page) return undefined;
   const headingLine = page.text.split(/\r?\n/u).find((line) => {
     const trimmed = line.trim();
-    return trimmed.length <= 48 && pattern.test(`\n${trimmed}`);
+    return trimmed.length <= 68 && pattern.test(`\n${trimmed}`);
   }) ?? "";
   const headingIndex = page.text.indexOf(headingLine);
   const fromHeading = headingIndex < 0 ? page.text : page.text.slice(headingIndex);
@@ -307,11 +331,64 @@ function sectionEvidence(kind: Exclude<NavigationKind, "title">, pages: PageText
     kind,
     page: page.page,
     section: kind,
-    evidence: truncateEvidence(fromHeading),
+    evidence: truncateEvidence(fromHeading, maxChars),
   };
 }
 
-function buildNavigation(pages: PageText[]): NavigationEntry[] {
+export function extractPaperArtifacts(pages: PageText[]): PaperArtifact[] {
+  const artifacts: PaperArtifact[] = [];
+  const figTabRegex = /^(?:Fig(?:ure)?\.?\s*\d+|Table\s*\d+|图\s*\d+|表\s*\d+)\s*[:.：]?\s*(.{10,260})/imu;
+  const algoRegex = /^(?:Algorithm\s*\d+|算法\s*\d+|Procedure\s+\w+)\s*[:.：]?\s*(.{6,260})/imu;
+  const eqRegex = /(?:[A-Za-z0-9_()]+\s*=\s*[^.\n]{6,120}(?:\(\d+\)|（\d+）)|\\(?:sum|frac|argmax|argmin|softmax|mathcal)\b[^.\n]{4,120})/imu;
+
+  for (const page of pages) {
+    const lines = page.text.split(/\r?\n/u).map((l) => l.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const windowText = [line, lines[i + 1] ?? ""].join(" ").trim();
+      const figMatch = windowText.match(figTabRegex);
+      if (figMatch) {
+        const isTable = /^(?:Table|表)/iu.test(windowText);
+        const labelMatch = windowText.match(/^(?:Fig(?:ure)?\.?\s*\d+|Table\s*\d+|图\s*\d+|表\s*\d+)/iu);
+        artifacts.push({
+          id: `A${String(artifacts.length + 1).padStart(2, "0")}`,
+          kind: isTable ? "table" : "figure",
+          page: page.page,
+          label: labelMatch?.[0]?.trim() ?? (isTable ? "Table" : "Figure"),
+          snippet: truncateEvidence(windowText, 320),
+        });
+        continue;
+      }
+      const algoMatch = windowText.match(algoRegex);
+      if (algoMatch) {
+        const labelMatch = windowText.match(/^(?:Algorithm\s*\d+|算法\s*\d+|Procedure\s+\w+)/iu);
+        const blockWindow = lines.slice(i, i + 6).join(" ");
+        artifacts.push({
+          id: `A${String(artifacts.length + 1).padStart(2, "0")}`,
+          kind: "algorithm",
+          page: page.page,
+          label: labelMatch?.[0]?.trim() ?? "Algorithm",
+          snippet: truncateEvidence(blockWindow, 400),
+        });
+        continue;
+      }
+      const eqMatch = line.match(eqRegex);
+      if (eqMatch) {
+        const eqNum = line.match(/(?:\((\d+)\)|（(\d+)）)\s*$/u);
+        artifacts.push({
+          id: `A${String(artifacts.length + 1).padStart(2, "0")}`,
+          kind: "equation",
+          page: page.page,
+          label: eqNum ? `Equation (${eqNum[1] ?? eqNum[2]})` : `Equation p.${page.page}`,
+          snippet: truncateEvidence(line, 240),
+        });
+      }
+    }
+  }
+  return artifacts.slice(0, 20);
+}
+
+export function buildNavigation(pages: PageText[]): NavigationEntry[] {
   const entries = [
     titleEvidence(pages),
     sectionEvidence("abstract", pages) ?? untitledAbstract(pages),
@@ -350,7 +427,7 @@ function enrichDraftWithHanlp(draft: Record<string, unknown>, analysis: HanLPDoc
   return draft;
 }
 
-function draftLedger(sourcePdf: string, navigation: NavigationEntry[]): Record<string, unknown> {
+export function draftLedger(sourcePdf: string, navigation: NavigationEntry[], artifacts: PaperArtifact[] = []): Record<string, unknown> {
   return {
     schema_version: "1.0",
     review_status: "draft",
@@ -367,6 +444,7 @@ function draftLedger(sourcePdf: string, navigation: NavigationEntry[]): Record<s
       evidence: entry.evidence,
       review_note: "填写可追溯、可检验的事实陈述和覆盖术语；不要从叙事表达反推事实。",
     })),
+    ...(artifacts.length > 0 ? { structured_artifacts: artifacts } : {}),
   };
 }
 
@@ -416,13 +494,14 @@ async function main(argv: string[]): Promise<void> {
   const outputDir = await createWorkspace(args.workspace);
   const extracted = await extractPages(args.pdfPath);
   const navigation = buildNavigation(extracted.pages);
-  const draft = draftLedger(args.pdfPath, navigation);
+  const artifacts = extractPaperArtifacts(extracted.pages);
+  const draft = draftLedger(args.pdfPath, navigation, artifacts);
   if (args.hanlp.enabled) {
     const navigationText = navigation.map((entry) => entry.evidence).join("\n");
     enrichDraftWithHanlp(draft, await analyzeWithHanLP(navigationText, args.hanlp));
   }
   await writeFile(join(outputDir, "extraction.json"), `${JSON.stringify({ page_count: extracted.pageCount, pages: extracted.pages }, null, 2)}\n`, "utf8");
-  await writeFile(join(outputDir, "navigation.json"), `${JSON.stringify({ entries: navigation }, null, 2)}\n`, "utf8");
+  await writeFile(join(outputDir, "navigation.json"), `${JSON.stringify({ entries: navigation, ...(artifacts.length > 0 ? { artifacts } : {}) }, null, 2)}\n`, "utf8");
   await writeFile(join(outputDir, "fact-ledger.draft.json"), `${JSON.stringify(draft, null, 2)}\n`, "utf8");
 
   let rendered: { pages: number[]; files: string[] } | undefined;
