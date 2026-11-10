@@ -8,8 +8,8 @@ import { spawnSync } from "node:child_process";
  *
  * Bridges `hankcs/HanLP` (RESTful API + Native Python API + Offline Fallback)
  * into `conversion-skill`'s 5-step knowledge conversion workflow:
- *  1. Fine/Coarse Tokenization (`tok/fine`, `tok/coarse`) & Custom Dictionary rules (`dict_force`, `dict_combine`)
- *  2. Part-of-Speech Tagging (`pos/ctb`, `pos/pku`) & Named Entity Recognition (`ner/msra`, `ner/ontonotes`)
+ *  1. Fine Tokenization (`tok/fine`) & Custom Dictionary rules (`dict_force`, `dict_combine`)
+ *  2. Named Entity Recognition (`ner/msra`, `ner/ontonotes`)
  *  3. Semantic Role Labeling (`srl`) -> Extracts `ARG0` (Actor), `PRED` (Core Action), `ARG1` (Target),
  *     `ARGM-CND` / `ARGM-TMP` (Trigger Condition / Constraint) for Step 2 Fact Skeletons
  *  4. Dependency Parsing (`dep`) -> Computes syntactic tree depth & clause complexity for Step 5 Lao-Yu Gate
@@ -185,12 +185,9 @@ export interface HanLPDocumentAnalysis {
   backendUsed: HanLPBackendMode;
   sentences: string[];
   tokensFine: string[][];
-  tokensCoarse: string[][];
-  posTags: string[][];
   entities: HanLPEntity[];
   srlFrames: HanLPSrlFrame[];
   keyphrases: Array<{ phrase: string; score: number }>;
-  extractiveSummary: string[];
   depDiagnostics: HanLPDepDiagnostics;
 }
 
@@ -1443,7 +1440,7 @@ async function callHanLPRestful(text: string, options: HanLPOptions): Promise<Re
       headers,
       body: JSON.stringify({
         text,
-        tasks: ["tok/fine", "tok/coarse", "pos/ctb", "ner/msra", "srl", "dep"],
+        tasks: ["tok/fine", "ner/msra", "srl", "dep"],
         language: options.language || "zh",
       }),
       signal: controller.signal,
@@ -1474,9 +1471,8 @@ function callHanLPNativeBridge(text: string, options: HanLPOptions): Record<stri
           auth: options.auth || null,
           language: options.language || "zh",
           custom_dict_path: options.customDictPath,
-          tasks: ["tok/fine", "tok/coarse", "pos/ctb", "ner/msra", "srl", "dep"],
+          tasks: ["tok/fine", "ner/msra", "srl", "dep"],
           extract_keyphrases: true,
-          summarize: true,
         }),
         encoding: "utf-8",
         timeout: options.timeoutMs ?? 8000,
@@ -1504,15 +1500,6 @@ function normalizeHanLPDocumentResponse(
     : Array.isArray(doc["tok"])
       ? doc["tok"]
       : splitSentencesMultilingual(rawText).map((s) => segmentTextLocal(s, customDict));
-
-  const tokCoarse: string[][] = Array.isArray(doc["tok/coarse"]) ? doc["tok/coarse"] : tokFine;
-  const posTags: string[][] = Array.isArray(doc["pos/ctb"])
-    ? doc["pos/ctb"]
-    : Array.isArray(doc["pos/pku"])
-      ? doc["pos/pku"]
-      : Array.isArray(doc["pos"])
-        ? doc["pos"]
-        : tokFine.map((sent) => sent.map(() => "NN"));
 
   const sentences =
     Array.isArray(rawDoc.sentences) && rawDoc.sentences.length === tokFine.length
@@ -1603,27 +1590,13 @@ function normalizeHanLPDocumentResponse(
   const mergedEntities = entities.length > 0 ? entities : localExtracted.entities;
   const mergedSrl = srlFrames.length > 0 ? srlFrames : extractLocalSrlFrames(sentences);
 
-  const extractiveSummary =
-    sentences.length <= 3
-      ? sentences
-      : [...sentences]
-          .sort((a, b) => {
-            const scoreA = keyphrases.reduce((acc, kp) => acc + (a.includes(kp.phrase) ? kp.score : 0), 0);
-            const scoreB = keyphrases.reduce((acc, kp) => acc + (b.includes(kp.phrase) ? kp.score : 0), 0);
-            return scoreB - scoreA;
-          })
-          .slice(0, 3);
-
   return {
     backendUsed,
     sentences,
     tokensFine: tokFine,
-    tokensCoarse: tokCoarse,
-    posTags,
     entities: mergedEntities,
     srlFrames: mergedSrl,
     keyphrases,
-    extractiveSummary,
     depDiagnostics: {
       sentenceCount: sentences.length,
       maxTreeDepth,
@@ -1688,7 +1661,6 @@ export function analyzeWithHanLPSync(
       sentences,
       document: {
         "tok/fine": tokensFine,
-        "tok/coarse": tokensFine,
       },
     },
     "local-fallback",
