@@ -25,13 +25,21 @@ import {
   type FactLedger,
 } from "./check-output";
 import { evaluateClaimFidelity, evaluateTextRecognitionJudgment } from "./hanlp-helper";
-import { screenThesisKeywords } from "./screen-keywords";
+import { buildNavigation, normalizePdfAcademicText, sortPdfTextItemsTwoColumn } from "./evaluate-pdf";
+import { bundleStandaloneWebSkill, runUnifiedPipeline } from "./pipeline";
+import { queryAuthorStyleByName, queryGameTermsByTitle, screenThesisKeywords, translateClassicalChinese } from "./screen-keywords";
 import { relativeIsInside, stableJson, usageError } from "./shared";
 import { analyzeInput } from "./validate-input";
 
 export interface OfflineCaseCheck {
   id: string;
-  category: "input_routing" | "domain_example" | "adversarial_nli" | "visual_mermaid" | "text_recognition_judgment";
+  category:
+    | "input_routing"
+    | "domain_example"
+    | "adversarial_nli"
+    | "visual_mermaid"
+    | "text_recognition_judgment"
+    | "v3_lift_and_stress";
   passed: boolean;
   details: string;
 }
@@ -287,6 +295,122 @@ export function runOfflineBenchmarkSuite(): OfflineBenchmarkReport {
       repetitiveScreened.thesis_keywords.some((k) => k.keyword === "核心瓶颈") &&
       repoExamplesJudgment.narrative_boundary_review.within_boundary,
     details: `bloat_caught=${jBloat.narrative_boundary_review.story_bloat_detected}, classical_source=${classicalScreened.classical_translation?.matched_canonical_source}, rep_mode=${repetitiveScreened.discourse_mode}, habit=${classicalScreened.habit_analogy_mappings[0]?.habit}`,
+  });
+
+  // 6. v3.0 Baseline Naive-ELI5 vs. Skill Lift & Weak-Model Specimen-Echo / Static-Sticker Stress
+  const naiveBaselineOutput = `# 快速排序通俗解释\n\n> 表达风格：\`anime\`\n> 篇幅：\`default\`\n\n<details>\n<summary>幕后分析</summary>\n\n| 知识概念 | 类比元素 | 对应机制 | 适用边界 |\n|---|---|---|---|\n| 基准值 | 皮沃特老师 | 基准值就是皮沃特老师 | 边界说明超过六个字 |\n| 分区 | 左右站队 | 元素就是学生 | 边界说明超过六个字 |\n| 递归 | 继续排队 | 递归就是重复点名 | 边界说明超过六个字 |\n\n</details>\n\n其实很简单！先别急。\n\n让我们先来看看皮沃特老师是怎么排队的。\n\n这不是普通的排队，而是一场魔法分班；它的意义不在于排好，而在于秩序。\n\n## 知识点校验\n\n快速排序每次选取基准元素将数组划分为小于和大于基准的两部分并递归排序，平均时间复杂度为 O(n log n)，最坏退化为 O(n^2)。\n`;
+  const naiveCheck = analyzeMarkdown(naiveBaselineOutput, {
+    level: "default",
+    strictHumanVoice: true,
+    enforceBaselineFloor: true,
+    textJudgment: true,
+    hanlpOptions: { enabled: true, mode: "local-fallback" },
+  });
+  const skillFlagshipCheck = analyzeMarkdown(examples[0]!.content, {
+    level: "default",
+    strictHumanVoice: true,
+    enforceBaselineFloor: true,
+    textJudgment: true,
+    hanlpOptions: { enabled: true, mode: "local-fallback" },
+  });
+  const hvDelta =
+    (skillFlagshipCheck.hanlp_report?.human_voice_diagnostics.humanVoiceScore ?? 0) -
+    (naiveCheck.hanlp_report?.human_voice_diagnostics.humanVoiceScore ?? 0);
+  const retellDelta =
+    (skillFlagshipCheck.text_recognition_judgment?.layperson_retelling_anchor.retellability_score ?? 0) -
+    (naiveCheck.text_recognition_judgment?.layperson_retelling_anchor.retellability_score ?? 0);
+
+  checks.push({
+    id: "v3-lift:naive-eli5-vs-skill-delta",
+    category: "v3_lift_and_stress",
+    passed:
+      naiveCheck.verdict === "FAIL" &&
+      (naiveCheck.text_recognition_judgment?.analogy_authenticity_review.non_isomorphic_rows.length ?? 0) >= 2 &&
+      skillFlagshipCheck.verdict === "PASS" &&
+      hvDelta >= 30 &&
+      retellDelta >= 15,
+    details: `naive=${naiveCheck.verdict}, skill=${skillFlagshipCheck.verdict}, hv_delta=+${hvDelta}, retell_delta=+${retellDelta}, non_isomorphic_caught=${naiveCheck.text_recognition_judgment?.analogy_authenticity_review.non_isomorphic_rows.length}`,
+  });
+
+  // 7. v3.0 Author Gate Profile (Gu Long staccato exemption) + Honest Unmatched Fallback + Polysemy Disambiguation
+  const gulongDoc = `# 窄巷死锁\n\n> 表达风格：\`narrative\`\n> 篇幅：\`default\`\n\n<details>\n<summary>幕后分析</summary>\n\n| 知识概念 | 类比元素 | 对应机制 | 适用边界 |\n|---|---|---|---|\n| 互斥条件 | 独扇窄铁门 | 同一时刻只容一人握住门闩通过，另一人必须在外等候 | 铁门是物理空间排他，软件锁还涉及内核态上下文切换开销 |\n| 持有并等待 | 攥紧门闩索要钥匙 | 手里死死扣住门闩不放，同时伸手向对方讨要开锁铜钥 | 现实中人会体力不支松手，线程无超时机制会永久挂起阻塞 |\n| 循环等待 | 窄巷两人对峙成环 | 甲等乙交出铜钥、乙等甲让出门闩，形成首尾咬死的等待闭环 | 真实死锁环可能跨越数十个微服务节点而非仅有两个参与者 |\n\n</details>\n\n## 正文\n\n风很冷，窄巷里只有一扇生锈的铁门。\n\n张聋子右手死死扣住门闩，眼睛却盯着李瞎子腰间的铜钥匙。\n\n李瞎子按住铜钥匙不肯松手，除非张聋子先把门闩让开半寸。\n\n谁也不肯退后一步，谁也没本事硬撬开对方的手指，结果两个人就像两颗咬死的齿轮卡在巷口直到天明。\n\n## 知识点校验\n\n死锁在互斥条件、持有并等待、不可抢占与循环等待四个条件同时成立时触发；只要破坏其中任意一环（如统一加锁顺序或设置超时释放），阻塞闭环最终即告解除。\n`;
+  const gulongWithoutProfile = analyzeMarkdown(gulongDoc, {
+    level: "default",
+    strictHumanVoice: true,
+    enforceBaselineFloor: true,
+    hanlpOptions: { enabled: true, mode: "local-fallback" },
+  });
+  const gulongWithProfile = analyzeMarkdown(gulongDoc, {
+    level: "default",
+    authorProfile: "古龙",
+    strictHumanVoice: true,
+    enforceBaselineFloor: true,
+    hanlpOptions: { enabled: true, mode: "local-fallback" },
+  });
+  const unmatchedAuthor = queryAuthorStyleByName("村上春树", "CAP定理与网络分区权衡");
+  const unmatchedGame = queryGameTermsByTitle("俄罗斯方块", "内存碎片整理与紧凑压缩");
+  const wolfClassical = translateClassicalChinese("乃悟前狼假寐，盖以诱敌。");
+  const borrowClassical = translateClassicalChinese("以是人多以书假余。");
+
+  checks.push({
+    id: "v3-stress:author-profile-honest-fallback-and-polysemy",
+    category: "v3_lift_and_stress",
+    passed:
+      gulongWithoutProfile.verdict === "FAIL" &&
+      gulongWithProfile.verdict === "PASS" &&
+      unmatchedAuthor.matched === false &&
+      unmatchedAuthor.author_name_zh === "村上春树" &&
+      unmatchedGame.matched === false &&
+      unmatchedGame.game_name === "俄罗斯方块" &&
+      wolfClassical.pithy_vernacular.includes("闭眼装睡") &&
+      borrowClassical.pithy_vernacular.includes("借给我"),
+    details: `gulong_std=${gulongWithoutProfile.verdict}, gulong_profile=${gulongWithProfile.verdict}, unmatched_author=${unmatchedAuthor.author_name_zh}(matched=${unmatchedAuthor.matched}), wolf=${wolfClassical.pithy_vernacular}`,
+  });
+
+  // 8. v3.0 Two-Column PDF Coordinate Sorting, Custom Method Heading & Standalone Web Bundler
+  const twoColSorted = sortPdfTextItemsTwoColumn(
+    [
+      { str: "FlashAttention: Fast and Memory-Efficient Exact Attention", x: 95, y: 740, width: 420 },
+      { str: "1. Introduction", x: 72, y: 680, width: 120 },
+      { str: "3. FlashAttention: Algorithm", x: 320, y: 680, width: 180 },
+      { str: "Standard attention uses O(N^2) memory.", x: 72, y: 660, width: 210 },
+      { str: "We tile Q, K, V blocks in SRAM.", x: 320, y: 660, width: 200 },
+    ],
+    612,
+  );
+  const normPdf = normalizePdfAcademicText("efﬁcient trans-\nformer model with \ufffd symbol");
+  const navEntries = buildNavigation([
+    {
+      page: 1,
+      characters: 380,
+      text: [
+        "FlashAttention: Fast and Memory-Efficient Exact Attention",
+        "Abstract",
+        "We propose an IO-aware exact attention algorithm that uses tiling to reduce HBM accesses.",
+        "1. Introduction",
+        "Transformers are slow and memory-hungry on long sequences.",
+        "3. FlashAttention: Algorithm and Analysis",
+        "We compute exact softmax attention by tiling inputs into SRAM blocks and rescaling online with O(N) memory complexity = softmax(QK^T).",
+      ].join("\n"),
+    },
+  ]);
+  const pipeRes = runUnifiedPipeline({ inputText: "乃悟前狼假寐，盖以诱敌。" });
+  const webBundle = bundleStandaloneWebSkill(root);
+
+  checks.push({
+    id: "v3-infra:pdf-twocol-method-and-web-bundler",
+    category: "v3_lift_and_stress",
+    passed:
+      twoColSorted.layoutMode === "two-column" &&
+      twoColSorted.lines.indexOf("Standard attention uses O(N^2) memory.") <
+        twoColSorted.lines.indexOf("3. FlashAttention: Algorithm") &&
+      normPdf.text.includes("efficient transformer") &&
+      normPdf.mathWarnings.length >= 1 &&
+      navEntries.some((e) => e.kind === "method" && e.evidence.includes("FlashAttention: Algorithm")) &&
+      pipeRes.default_routing.mode === "neutral_direct_gist" &&
+      !webBundle.includes("](references/") &&
+      !webBundle.includes("bun run "),
+    details: `layout=${twoColSorted.layoutMode}, method_found=${navEntries.some((e) => e.kind === "method")}, route=${pipeRes.default_routing.mode}, web_bytes=${Buffer.byteLength(webBundle, "utf8")}`,
   });
 
   const passedCount = checks.filter((c) => c.passed).length;

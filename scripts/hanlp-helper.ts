@@ -116,11 +116,14 @@ export interface GrammarInspectionResult {
   annotated_markdown: string;
 }
 
+export type AuthorGateProfile = "standard" | "staccato_literary" | "dialectic_satire";
+
 export interface AnalogyAuthenticityReview {
   is_ai_produced: boolean;
   label: AiProducedLabel;
   sticker_label_terms: string[];
   ungrounded_story_elements: string[];
+  non_isomorphic_rows: string[];
   reasons: string[];
 }
 
@@ -446,7 +449,33 @@ export function evaluateReadmeExpression(rawMarkdown: string): ReadmeExpressionR
   };
 }
 
-export function evaluateMicroSentenceCracker(rawMarkdown: string): MicroSentenceCrackerResult {
+export function resolveAuthorGateProfile(
+  authorOrStyle?: string | null,
+  rawMarkdown = "",
+): AuthorGateProfile {
+  const combined = `${authorOrStyle ?? ""}\n${rawMarkdown.slice(0, 600)}`.toLocaleLowerCase();
+  if (
+    /古龙|gu\s*long|gulong|海明威|hemingway|契诃夫|chekhov|staccato_literary|\bverse\b|作家风格[：:]\s*`?(?:古龙|海明威|契诃夫)|仿真【(?:古龙|海明威|契诃夫)】/iu.test(
+      combined,
+    )
+  ) {
+    return "staccato_literary";
+  }
+  if (
+    /鲁迅|lu\s*xun|luxun|王小波|wang\s*xiaobo|刘震云|liu\s*zhenyun|dialectic_satire|作家风格[：:]\s*`?(?:鲁迅|王小波|刘震云)|仿真【(?:鲁迅|王小波|刘震云)】/iu.test(
+      combined,
+    )
+  ) {
+    return "dialectic_satire";
+  }
+  return "standard";
+}
+
+export function evaluateMicroSentenceCracker(
+  rawMarkdown: string,
+  authorOrStyle?: string | null,
+): MicroSentenceCrackerResult {
+  const gateProfile = resolveAuthorGateProfile(authorOrStyle, rawMarkdown);
   const withoutScaffold = rawMarkdown
     .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/u, "")
     .replace(/```[\s\S]*?```/g, "")
@@ -477,6 +506,10 @@ export function evaluateMicroSentenceCracker(rawMarkdown: string): MicroSentence
       if (/^[\u4e00-\u9fff]{2,3}$/u.test(cleanedSeg)) {
         const len = cleanedSeg.length as 2 | 3;
         const isImperative = imperativePrefixRegex.test(cleanedSeg);
+        // Under staccato_literary (Gu Long / Hemingway / Chekhov / Verse), intentional non-imperative short beats (e.g., "风停了", "剑已出") are honored!
+        if (gateProfile === "staccato_literary" && !isImperative) {
+          continue;
+        }
         const key = `${cleanedSeg}@${line.slice(0, 20)}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -513,14 +546,17 @@ export function evaluateMicroSentenceCracker(rawMarkdown: string): MicroSentence
   const qnaRegex = /(?:你可能会问|有人可能会问|那么问题来了|这是为什么呢[？?]\s*(?:原因在于|其实很简单|答案很明显)|这意味着什么(?:呢)?[？?]\s*这意味着|到底什么是[^，。！？\n]{1,12}呢[？?]\s*其实说白了)/gu;
   const rhetorical_qna_shells = [...new Set((withoutScaffold.match(qnaRegex) ?? []).map((m) => m.trim()))];
 
-  // 4. Negative-contrast parallelism addiction ("不是A，而是B" / "不仅A，更是B" overuse >= 2)
-  const negParallelRegex = /(?:不是[^，。！？；\n]{1,18}[，,]\s*而是[^，。！？；\n]{1,20}|不在于[^，。！？；\n]{1,18}[，,]\s*而在于[^，。！？；\n]{1,20}|不仅是一(?:场|次|种)[^，。！？；\n]{1,14}[，,]\s*更是一(?:场|次|种)[^，。！？；\n]{1,16})/gu;
+  // 4. Negative-contrast parallelism addiction ("不是A，而是B" / "不仅A，更是B" / 倒装正反排比 "是A出来的，不是B出来的")
+  const negParallelRegex = /(?:不是[^，。！？；\n]{1,18}[，,]\s*而是[^，。！？；\n]{1,20}|不在于[^，。！？；\n]{1,18}[，,]\s*而在于[^，。！？；\n]{1,20}|不仅是一(?:场|次|种)[^，。！？；\n]{1,14}[，,]\s*更是一(?:场|次|种)[^，。！？；\n]{1,16}|是[^，。！？；\n]{1,22}出来的[，,]\s*不是[^，。！？；\n]{1,22}出来的|是靠[^，。！？；\n]{1,18}[，,]\s*不是靠[^，。！？；\n]{1,18})/gu;
+  const invertedParallelRegex = /(?:是[^，。！？；\n]{1,22}出来的[，,]\s*不是[^，。！？；\n]{1,22}出来的|是靠[^，。！？；\n]{1,18}[，,]\s*不是靠[^，。！？；\n]{1,18})/gu;
   const negative_parallelism_matches = [...(withoutScaffold.match(negParallelRegex) ?? [])].map((m) => m.trim());
+  const inverted_parallelism_matches = [...(withoutScaffold.match(invertedParallelRegex) ?? [])].map((m) => m.trim());
 
-  // 5. Hollow epigrammatic endings (伪金句与空洞拔高收尾)
-  const epigramRegex = /(?:这就是[\u4e00-\u9fffA-Za-z0-9]{1,12}的魅力所在|掌握了[\u4e00-\u9fffA-Za-z0-9]{1,10}[，,]\s*你就掌握了[\u4e00-\u9fff]{2,12}的钥匙|大道至简[，,]\s*[\u4e00-\u9fffA-Za-z0-9]{2,12}亦是如此|一切复杂的[\u4e00-\u9fff]{2,8}[，,]\s*归根结底都是)/gu;
+  // 5. Hollow epigrammatic endings & em-dash antithetical pseudo-aphorisms (伪金句与破折号短对偶收尾)
+  const epigramRegex = /(?:这就是[\u4e00-\u9fffA-Za-z0-9]{1,12}的魅力所在|掌握了[\u4e00-\u9fffA-Za-z0-9]{1,10}[，,]\s*你就掌握了[\u4e00-\u9fff]{2,12}的钥匙|大道至简[，,]\s*[\u4e00-\u9fffA-Za-z0-9]{2,12}亦是如此|一切复杂的[\u4e00-\u9fff]{2,8}[，,]\s*归根结底都是|(?:——|--|—)\s*[\u4e00-\u9fff]{1,4}(?:能|可|易|会)[\u4e00-\u9fff]{1,3}[，,]\s*[\u4e00-\u9fff]{1,4}[\u4e00-\u9fff]{1,2}(?:不了|不出|不来|不住|不起|不得))/gu;
   const hollow_epigrams = [...new Set((withoutScaffold.match(epigramRegex) ?? []).map((m) => m.trim()))];
 
+  const negParallelThreshold = gateProfile === "dialectic_satire" ? 4 : 2;
   const reasons = matched_sentences.map(
     (m) =>
       `捕获${m.char_length}字独立短句「${m.text}」(${m.pattern_type === "xian_bie_imperative" ? "先xx/别x式指令短句" : "独立两三字短句"})`
@@ -528,17 +564,20 @@ export function evaluateMicroSentenceCracker(rawMarkdown: string): MicroSentence
   if (rhetorical_qna_shells.length > 0) {
     reasons.push(`捕获 AI 设问自答过渡壳：${rhetorical_qna_shells.join("；")}`);
   }
-  if (negative_parallelism_matches.length >= 2) {
+  if (negative_parallelism_matches.length >= negParallelThreshold) {
     reasons.push(`捕获高频「不是…而是…/不仅…更是…」排比成瘾 (${negative_parallelism_matches.length} 处)：${negative_parallelism_matches.slice(0, 2).join("；")}`);
+  } else if (inverted_parallelism_matches.length > 0 && gateProfile !== "dialectic_satire") {
+    reasons.push(`捕获倒装正反排比金句「是…出来的，不是…出来的」：${inverted_parallelism_matches.join("；")}`);
   }
   if (hollow_epigrams.length > 0) {
-    reasons.push(`捕获伪金句空洞拔高：${hollow_epigrams.join("；")}`);
+    reasons.push(`捕获伪金句/破折号短对偶拔高：${hollow_epigrams.join("；")}`);
   }
 
   const is_ai_produced =
     matched_sentences.length > 0 ||
     rhetorical_qna_shells.length > 0 ||
-    negative_parallelism_matches.length >= 2 ||
+    negative_parallelism_matches.length >= negParallelThreshold ||
+    (inverted_parallelism_matches.length > 0 && gateProfile !== "dialectic_satire") ||
     hollow_epigrams.length > 0;
 
   return {
@@ -772,31 +811,66 @@ export function evaluateAnalogyAuthenticity(rawMarkdown: string): AnalogyAuthent
     /(?:(?:哈希|递归|梯度|矩阵|向量|指针|线程|进程|协议|路由|缓存|队列|堆栈|注意力|贝叶斯|卷积|正则|分片|共识|参数|算子|接口|组件|字节|套接字|吞吐量)(?:先生|女士|老师|同学|大叔|爷爷|奶奶|精灵|小精灵|队长|将军|大臣|魔法师|卫兵|使者|宝宝|小哥|老哥)|(?:皮沃特|帕克特|托肯|诺德|赫德)(?:先生|老师|同学|队长|大叔)?)/gu;
   const sticker_label_terms = [...new Set((withoutQuotes.match(stickerRegex) ?? []).map((m) => m.trim()))];
 
-  // 2. Check if mapping table story elements are grounded in the narrative body
+  // 2. Check if mapping table story elements are grounded in the narrative body & check mechanism isomorphism
   const ungrounded_story_elements: string[] = [];
+  const non_isomorphic_rows: string[] = [];
+  const staticNounEquateRe =
+    /^[\u4e00-\u9fffA-Za-z0-9\s（）()「」]{1,12}(?:就是|即|代表|象征|相当于|好比|当作|比作)[\u4e00-\u9fffA-Za-z0-9\s（）()「」]{1,12}[。.]?$/u;
+
   const detailsMatch = rawMarkdown.match(/<details[\s\S]*?<\/details>/iu);
-  if (detailsMatch && detailsMatch.index !== undefined) {
-    const detailsBlock = detailsMatch[0];
-    const bodyText = rawMarkdown.slice(detailsMatch.index + detailsBlock.length);
-    const tableLines = detailsBlock
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith("|") && l.endsWith("|"));
-    if (tableLines.length >= 3) {
-      for (const rowLine of tableLines.slice(2)) {
-        const cells = rowLine
-          .replace(/^\|/u, "")
-          .replace(/\|$/u, "")
-          .split("|")
-          .map((c) => c.trim());
-        const storyCell = cells[1] ?? "";
-        if (storyCell && storyCell.length >= 2) {
-          const coreTokens = segmentTextLocal(storyCell).filter((t) => /^[\u4e00-\u9fffA-Za-z0-9]{2,}$/u.test(t) && !STOPWORDS_ZH.has(t));
-          const grounded = coreTokens.length === 0 || coreTokens.some((tok) => bodyText.includes(tok));
-          if (!grounded) {
-            ungrounded_story_elements.push(storyCell);
-          }
+  const tableContainer = detailsMatch ? detailsMatch[0] : rawMarkdown;
+  const bodyText =
+    detailsMatch && detailsMatch.index !== undefined
+      ? rawMarkdown.slice(detailsMatch.index + detailsMatch[0].length)
+      : rawMarkdown;
+
+  // Group contiguous pipe lines into individual Markdown table blocks
+  const tableBlocks: string[][] = [];
+  let currentBlock: string[] = [];
+  for (const rawLine of tableContainer.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      currentBlock.push(trimmed);
+    } else if (currentBlock.length > 0) {
+      tableBlocks.push(currentBlock);
+      currentBlock = [];
+    }
+  }
+  if (currentBlock.length > 0) tableBlocks.push(currentBlock);
+
+  for (const block of tableBlocks) {
+    if (block.length < 3) continue;
+    const headers = block[0]!
+      .replace(/^\|/u, "")
+      .replace(/\|$/u, "")
+      .split("|")
+      .map((c) => c.trim());
+    const sourceIdx = headers.findIndex((h) => /知识概念|专业概念|原始概念/u.test(h));
+    const storyIdx = headers.findIndex((h) => /故事元素|表达元素|类比元素/u.test(h));
+    const mechIdx = headers.findIndex((h) => /对应理由|映射理由|对应机制/u.test(h));
+    if (sourceIdx < 0 || storyIdx < 0 || mechIdx < 0) continue;
+
+    for (const rowLine of block.slice(2)) {
+      const cells = rowLine
+        .replace(/^\|/u, "")
+        .replace(/\|$/u, "")
+        .split("|")
+        .map((c) => c.trim());
+      if (cells.every((c) => /^:?-{2,}:?$/u.test(c))) continue;
+      const sourceCell = cells[sourceIdx] ?? "";
+      const storyCell = cells[storyIdx] ?? "";
+      const mechCell = cells[mechIdx] ?? "";
+      if (detailsMatch && storyCell && storyCell.length >= 2) {
+        const coreTokens = segmentTextLocal(storyCell).filter(
+          (t) => /^[\u4e00-\u9fffA-Za-z0-9]{2,}$/u.test(t) && !STOPWORDS_ZH.has(t),
+        );
+        const grounded = coreTokens.length === 0 || coreTokens.some((tok) => bodyText.includes(tok));
+        if (!grounded) {
+          ungrounded_story_elements.push(storyCell);
         }
+      }
+      if (mechCell && headers.length >= 4 && staticNounEquateRe.test(mechCell)) {
+        non_isomorphic_rows.push(`${sourceCell} -> ${mechCell}`);
       }
     }
   }
@@ -808,13 +882,17 @@ export function evaluateAnalogyAuthenticity(rawMarkdown: string): AnalogyAuthent
   if (ungrounded_story_elements.length > 0) {
     reasons.push(`映射表中的类比元素未进入正文叙事：${ungrounded_story_elements.join("、")}`);
   }
+  if (non_isomorphic_rows.length > 0) {
+    reasons.push(`映射表对应机制列缺乏动作/状态因果同构（仅做静态名词画等号）：${non_isomorphic_rows.join("；")}`);
+  }
 
-  const is_ai_produced = sticker_label_terms.length > 0;
+  const is_ai_produced = sticker_label_terms.length > 0 || non_isomorphic_rows.length >= 2;
   return {
     is_ai_produced,
     label: is_ai_produced ? "ai生产" : "正常",
     sticker_label_terms,
     ungrounded_story_elements,
+    non_isomorphic_rows,
     reasons,
   };
 }
@@ -1015,17 +1093,26 @@ export function evaluateNarrativeBoundary(rawMarkdown: string): NarrativeBoundar
   };
 }
 
-export function evaluateTextRecognitionJudgment(rawMarkdown: string): TextRecognitionJudgment {
+export function evaluateTextRecognitionJudgment(
+  rawMarkdown: string,
+  authorOrStyle?: string | null,
+): TextRecognitionJudgment {
+  const gateProfile = resolveAuthorGateProfile(authorOrStyle, rawMarkdown);
   const readme_expression_review = evaluateReadmeExpression(rawMarkdown);
-  const micro_sentence_cracker = evaluateMicroSentenceCracker(rawMarkdown);
+  const micro_sentence_cracker = evaluateMicroSentenceCracker(rawMarkdown, authorOrStyle);
   const grammar_inspection = evaluateGrammarInspection(rawMarkdown);
   const analogy_authenticity_review = evaluateAnalogyAuthenticity(rawMarkdown);
   const layperson_retelling_anchor = evaluateLaypersonRetelling(rawMarkdown);
   const beginner_friendliness = evaluateBeginnerFriendliness(rawMarkdown);
   const narrative_boundary_review = evaluateNarrativeBoundary(rawMarkdown);
 
+  const readmeTriggered =
+    gateProfile === "staccato_literary"
+      ? readme_expression_review.emoji_overuse
+      : readme_expression_review.is_ai_produced;
+
   const overall_ai_produced =
-    readme_expression_review.is_ai_produced ||
+    readmeTriggered ||
     micro_sentence_cracker.is_ai_produced ||
     analogy_authenticity_review.is_ai_produced ||
     narrative_boundary_review.story_bloat_detected;
@@ -1036,6 +1123,9 @@ export function evaluateTextRecognitionJudgment(rawMarkdown: string): TextRecogn
   }
   if (analogy_authenticity_review.sticker_label_terms.length > 0) {
     labels.push("伪类比贴标签");
+  }
+  if (analogy_authenticity_review.non_isomorphic_rows.length > 0) {
+    labels.push("静态贴牌非同构");
   }
   if (narrative_boundary_review.story_bloat_detected) {
     labels.push("长篇剧情注水");
@@ -1064,7 +1154,9 @@ export function evaluateHumanVoiceAndAntiSlop(
   bodyText: string,
   nlp: HanLPDocumentAnalysis,
   style = "anime",
+  authorOrStyle?: string | null,
 ): HumanVoiceDiagnostics {
+  const gateProfile = resolveAuthorGateProfile(authorOrStyle ?? style, bodyText);
   const cleanedBody = bodyText.replace(/<!--[\s\S]*?-->/g, "");
   const rawLines = cleanedBody
     .replace(/```[\s\S]*?```/g, "")
@@ -1110,11 +1202,14 @@ export function evaluateHumanVoiceAndAntiSlop(
   }
 
   const aiClichesFound = AI_CLICHE_PHRASES.filter((phrase) => cleanedBody.includes(phrase));
-  const textRecognitionJudgment = evaluateTextRecognitionJudgment(cleanedBody);
+  const textRecognitionJudgment = evaluateTextRecognitionJudgment(cleanedBody, authorOrStyle ?? style);
   const issue1Warnings: string[] = [];
   const isVerse = style === "verse";
   const isNeutral = style === "neutral";
-  if (!isVerse && paragraphs.length >= 3 && singleSentenceParagraphRatio > 0.35) {
+  const isStaccatoLiterary = gateProfile === "staccato_literary";
+  const isDialecticSatire = gateProfile === "dialectic_satire";
+  const maxSingleParaWarnThreshold = isStaccatoLiterary ? 1.0 : 0.35;
+  if (!isVerse && paragraphs.length >= 3 && singleSentenceParagraphRatio > maxSingleParaWarnThreshold) {
     issue1Warnings.push(`[Issue #1 人味门禁·一行一句预警] 单句成段（短碎段落）占比过高 (${Math.round(singleSentenceParagraphRatio * 100)}%)，读感接近 AI 快餐文；请将因果相连的句子合并为 2-5 句的自然段。`);
   }
   if (nonEntityMiddleDotCount >= 2) {
@@ -1123,13 +1218,13 @@ export function evaluateHumanVoiceAndAntiSlop(
   if (!isNeutral && bulletLineRatio > 0.2) {
     issue1Warnings.push(`[Issue #1 人味门禁·清单化正文预警] 叙事正文中列表行占比达 ${Math.round(bulletLineRatio * 100)}%，请勿把故事正文写成说明书清单。`);
   }
-  if (!isVerse && sentLengths.length >= 4 && sentenceLengthCv < 0.22) {
+  if (!isVerse && !isStaccatoLiterary && sentLengths.length >= 4 && sentenceLengthCv < 0.22) {
     issue1Warnings.push(`[Issue #1 人味门禁·句式节奏预警] 句子长度变异系数偏低 (CV=${sentenceLengthCv})，句式长短过于均一呆板，建议增加长短句交错的呼吸感。`);
   }
   if (aiClichesFound.length > 0) {
     issue1Warnings.push(`[Issue #1 人味门禁·AI 套话预警] 检测到高频 AI 模板套话: ${aiClichesFound.join("、")}，建议直接用具体情境和动作替代。`);
   }
-  if (textRecognitionJudgment.readme_expression_review.is_ai_produced) {
+  if (!isStaccatoLiterary && textRecognitionJudgment.readme_expression_review.is_ai_produced) {
     issue1Warnings.push(`[文本识别评判·readme表达审查(ai生产)] ${textRecognitionJudgment.readme_expression_review.reasons.join("；")}`);
   }
   if (!isVerse && textRecognitionJudgment.micro_sentence_cracker.is_ai_produced) {
@@ -1144,22 +1239,31 @@ export function evaluateHumanVoiceAndAntiSlop(
     }
   }
 
-  const singleLinePenalty = !isVerse && paragraphs.length >= 3 ? Math.max(0, (singleSentenceParagraphRatio - 0.25) * 45) : 0;
+  const singleLineBase = isStaccatoLiterary ? 1.0 : 0.25;
+  const singleLinePenalty = !isVerse && paragraphs.length >= 3 ? Math.max(0, (singleSentenceParagraphRatio - singleLineBase) * 45) : 0;
   const dotPenalty = Math.min(25, nonEntityMiddleDotCount * 6);
   const bulletPenalty = !isNeutral ? Math.max(0, (bulletLineRatio - 0.1) * 40) : 0;
-  const rhythmPenalty = !isVerse && sentLengths.length >= 4 && sentenceLengthCv < 0.25 ? 10 : 0;
+  const rhythmPenalty = !isVerse && !isStaccatoLiterary && sentLengths.length >= 4 && sentenceLengthCv < 0.25 ? 10 : 0;
   const clichePenalty = Math.min(20, aiClichesFound.length * 5);
   const emojiPenalty = Math.min(18, textRecognitionJudgment.readme_expression_review.emoji_count * 5);
+  const hasInvertedParallel = !isDialecticSatire && textRecognitionJudgment.micro_sentence_cracker.negative_parallelism_matches.some((m) =>
+    /^是/u.test(m)
+  );
+  const negParallelThreshold = isDialecticSatire ? 4 : 2;
   const microSentPenalty = !isVerse
     ? Math.min(
         20,
         textRecognitionJudgment.micro_sentence_cracker.matched_count * 7 +
           textRecognitionJudgment.micro_sentence_cracker.rhetorical_qna_shells.length * 8 +
-          (textRecognitionJudgment.micro_sentence_cracker.negative_parallelism_matches.length >= 2 ? 10 : 0) +
+          (textRecognitionJudgment.micro_sentence_cracker.negative_parallelism_matches.length >= negParallelThreshold || hasInvertedParallel ? 10 : 0) +
           textRecognitionJudgment.micro_sentence_cracker.hollow_epigrams.length * 8
       )
     : 0;
-  const stickerPenalty = Math.min(20, textRecognitionJudgment.analogy_authenticity_review.sticker_label_terms.length * 10);
+  const stickerPenalty = Math.min(
+    20,
+    textRecognitionJudgment.analogy_authenticity_review.sticker_label_terms.length * 10 +
+      textRecognitionJudgment.analogy_authenticity_review.non_isomorphic_rows.length * 10,
+  );
   const grammarPenalty = Math.min(24, textRecognitionJudgment.grammar_inspection.issue_count * 8);
   const humanVoiceScore = Math.max(
     0,

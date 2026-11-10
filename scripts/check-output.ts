@@ -10,7 +10,7 @@
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, evaluateClaimFidelity, evaluateGrammarInspection, evaluateHumanVoiceAndAntiSlop, evaluateTextRecognitionJudgment, loadCustomDictionary, parseHanLPCliOptions, segmentTextLocal, splitSentencesMultilingual, type HanLPDocumentAnalysis, type HanLPOptions, type HumanVoiceDiagnostics, type TextRecognitionJudgment } from "./hanlp-helper";
+import { analyzeWithHanLP, analyzeWithHanLPSync, consumeHanlpArg, evaluateClaimFidelity, evaluateGrammarInspection, evaluateHumanVoiceAndAntiSlop, evaluateTextRecognitionJudgment, loadCustomDictionary, parseHanLPCliOptions, resolveAuthorGateProfile, segmentTextLocal, splitSentencesMultilingual, type HanLPDocumentAnalysis, type HanLPOptions, type HumanVoiceDiagnostics, type TextRecognitionJudgment } from "./hanlp-helper";
 import { renderKeywordScreeningMarkdown, screenThesisKeywords, type UserHabitOption } from "./screen-keywords";
 import {
   EXPRESSION_STYLES,
@@ -90,6 +90,7 @@ interface LoadedLedger {
 export interface OutputCheckOptions {
   level: OutputLevel;
   expectedStyle?: ExpressionStyle;
+  authorProfile?: string;
   factsPath?: string;
   requireFacts?: boolean;
   hanlpOptions?: HanLPOptions;
@@ -474,12 +475,14 @@ export function evaluateChunksIndependently(
   style: string,
   hanlpOptions?: HanLPOptions,
   targetChunk?: number | "all",
+  authorProfile?: string,
 ): ChunkCheckReport[] {
   const prose = body.replace(/<!--[\s\S]*?-->/g, "").trim();
   const rawSections = prose.split(/(?=^##\s+)/m).map((section) => section.trim()).filter(Boolean);
   if (rawSections.length === 0) {
     return typeof targetChunk === "number" ? [emptyChunk(targetChunk, `未找到分块 ${targetChunk}`)] : [];
   }
+  const isStaccato = resolveAuthorGateProfile(authorProfile ?? style, body) === "staccato_literary";
 
   const reports: ChunkCheckReport[] = [];
   rawSections.forEach((secText, idx) => {
@@ -492,7 +495,7 @@ export function evaluateChunksIndependently(
       : `Chunk ${chunkIdx}`;
     const contentOnly = (lines[0]?.startsWith("## ") ? lines.slice(1).join("\n") : secText).trim();
     const nlp = analyzeWithHanLPSync(contentOnly, hanlpOptions);
-    const hv = evaluateHumanVoiceAndAntiSlop(contentOnly, nlp, style);
+    const hv = evaluateHumanVoiceAndAntiSlop(contentOnly, nlp, style, authorProfile);
     const depthPenalty = Math.max(0, (nlp.depDiagnostics.avgTreeDepth - 4.5) * 6);
     const complexPenalty = nlp.depDiagnostics.complexSentences.length * 5;
     const readability = Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty)));
@@ -503,9 +506,11 @@ export function evaluateChunksIndependently(
     if (wc < 600 || wc > 800) violations.push(`分块 [${chunkIdx}:${heading}] 字数 ${wc} 不在 600-800`);
     if (style !== "verse") {
       if (hv.paragraphCount < 2) violations.push(`分块 [${chunkIdx}:${heading}] 自然段不足 (${hv.paragraphCount} < 2)`);
-      if (avgSents < 1.8) violations.push(`分块 [${chunkIdx}:${heading}] 出现「一行一句」退化 (平均每段仅 ${avgSents} 句 < 1.8)`);
-      if (hv.singleSentenceParagraphRatio > 0.35) {
-        violations.push(`分块 [${chunkIdx}:${heading}] 单句短碎段占比过高 (${Math.round(hv.singleSentenceParagraphRatio * 100)}% > 35%)`);
+      const minAvgSents = isStaccato ? 1.2 : 1.8;
+      const maxSingleRatio = isStaccato ? 0.68 : 0.35;
+      if (avgSents < minAvgSents) violations.push(`分块 [${chunkIdx}:${heading}] 出现「一行一句」退化 (平均每段仅 ${avgSents} 句 < ${minAvgSents})`);
+      if (hv.singleSentenceParagraphRatio > maxSingleRatio) {
+        violations.push(`分块 [${chunkIdx}:${heading}] 单句短碎段占比过高 (${Math.round(hv.singleSentenceParagraphRatio * 100)}% > ${Math.round(maxSingleRatio * 100)}%)`);
       }
     }
     if (hv.nonEntityMiddleDotCount > 0) {
@@ -576,9 +581,13 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
     ? "STRUCTURE_PRESENT_NEEDS_REVIEW"
     : "NOT_REQUESTED";
   const mechanicalVerdict = structure_verdict === "PASS" && term_id_coverage_verdict === "PASS" ? "PASS" : "FAIL";
-  const text_recognition_judgment = evaluateTextRecognitionJudgment(options.readmeReview ? markdown : (storyBody(markdown) || markdown));
+  const effectiveAuthorOrStyle = options.authorProfile ?? style ?? options.expectedStyle;
+  const text_recognition_judgment = evaluateTextRecognitionJudgment(
+    options.readmeReview ? markdown : (storyBody(markdown) || markdown),
+    effectiveAuthorOrStyle,
+  );
   const hanlp_report = voiceRequested ? buildHanlpReport(markdown, options, ledger, stsThreshold, style) : undefined;
-  const humanVoiceFail = Boolean(options.strictHumanVoice && hanlp_report && humanVoiceBlocks(hanlp_report.human_voice_diagnostics, style));
+  const humanVoiceFail = Boolean(options.strictHumanVoice && hanlp_report && humanVoiceBlocks(hanlp_report.human_voice_diagnostics, style, options.authorProfile, markdown));
   const textJudgmentFail = Boolean(
     (options.textJudgment || options.readmeReview) &&
       (text_recognition_judgment.overall_ai_produced || text_recognition_judgment.grammar_inspection.has_issues),
@@ -593,11 +602,11 @@ export function analyzeMarkdown(markdown: string, options: OutputCheckOptions): 
       : (assistedPass ? "HANLP_NEURAL_PASS" : "HANLP_NEURAL_WARN");
   const mermaid_diagnostics = validateMermaidBlocks(markdown);
   const expression_baseline_report = options.enforceBaselineFloor && hanlp_report
-    ? evaluateExpressionBaseline(markdown, storyBody(markdown), verificationText(markdown), mapping, hanlp_report.human_voice_diagnostics, hanlp_report.lao_yu_readability_score, style, hanlp_report.semantic_conflicts, mermaid_diagnostics, text_recognition_judgment)
+    ? evaluateExpressionBaseline(markdown, storyBody(markdown), verificationText(markdown), mapping, hanlp_report.human_voice_diagnostics, hanlp_report.lao_yu_readability_score, style, hanlp_report.semantic_conflicts, mermaid_diagnostics, text_recognition_judgment, options.authorProfile)
     : undefined;
   const baselineFail = expression_baseline_report?.baseline_verdict === "FAIL";
   const chunk_reports = options.chunk
-    ? evaluateChunksIndependently(storyBody(markdown), style ?? options.expectedStyle ?? "anime", options.hanlpOptions, options.chunk)
+    ? evaluateChunksIndependently(storyBody(markdown), style ?? options.expectedStyle ?? "anime", options.hanlpOptions, options.chunk, options.authorProfile)
     : undefined;
   const chunkFail = Boolean(chunk_reports?.some((report) => report.verdict === "FAIL"));
   const verdict = mechanicalVerdict === "PASS" && !humanVoiceFail && !baselineFail && !chunkFail && !textJudgmentFail ? "PASS" : "FAIL";
@@ -769,8 +778,15 @@ export function projectConciseGist(markdown: string, habit: UserHabitOption = "a
   return renderKeywordScreeningMarkdown(report);
 }
 
-function humanVoiceBlocks(diagnostics: HumanVoiceDiagnostics, style: string | null): boolean {
-  const fragmented = style !== "verse" && diagnostics.paragraphCount >= 3 && diagnostics.singleSentenceParagraphRatio > 0.35;
+function humanVoiceBlocks(
+  diagnostics: HumanVoiceDiagnostics,
+  style: string | null,
+  authorProfile?: string,
+  markdown = "",
+): boolean {
+  const isStaccato = resolveAuthorGateProfile(authorProfile ?? style, markdown) === "staccato_literary";
+  const maxSingleRatio = isStaccato ? 1.0 : 0.35;
+  const fragmented = style !== "verse" && diagnostics.paragraphCount >= 3 && diagnostics.singleSentenceParagraphRatio > maxSingleRatio;
   return fragmented || diagnostics.nonEntityMiddleDotCount >= 2 || diagnostics.humanVoiceScore < 70;
 }
 
@@ -827,7 +843,7 @@ function buildHanlpReport(
     fact_semantic_scores,
     ...(semantic_conflicts.length > 0 ? { semantic_conflicts } : {}),
     lao_yu_readability_score: Math.max(0, Math.min(100, Math.round(100 - depthPenalty - complexPenalty - jargonPenalty - conflictPenalty))),
-    human_voice_diagnostics: evaluateHumanVoiceAndAntiSlop(body, nlp, style ?? options.expectedStyle ?? "anime"),
+    human_voice_diagnostics: evaluateHumanVoiceAndAntiSlop(body, nlp, style ?? options.expectedStyle ?? "anime", options.authorProfile),
     syntax_analysis_source: nlp.backendUsed === "local-fallback" ? "local_heuristic_estimate" : "hanlp_neural_dep",
     readability_note: nlp.backendUsed === "local-fallback"
       ? "可读性分数来自本地句法估算，不是 HanLP 神经网络依存分析。"
@@ -896,8 +912,17 @@ function evaluateExpressionBaseline(
   semanticConflicts?: Array<{ fact_id: string; reason: string; sentence?: string }>,
   mermaidDiagnostics?: MermaidDiagnostics,
   textJudgment?: TextRecognitionJudgment,
+  authorProfile?: string,
 ): ExpressionBaselineReport {
-  const thresholds = DEFAULT_EXPRESSION_BASELINE;
+  const isStaccato = resolveAuthorGateProfile(authorProfile ?? style, markdown) === "staccato_literary";
+  const thresholds: ExpressionBaselineThresholds = isStaccato
+    ? {
+        ...DEFAULT_EXPRESSION_BASELINE,
+        minAvgSentencesPerParagraph: 1.0,
+        maxSingleSentenceParagraphRatio: 1.0,
+        minAvgParagraphChars: 18,
+      }
+    : DEFAULT_EXPRESSION_BASELINE;
   const violations: string[] = [];
   const prose = body.replace(/```[\s\S]*?```/g, "").replace(/<!--[\s\S]*?-->/g, "");
   const paragraphs = prose.split(/\r?\n\s*\r?\n/u).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph && !/^#{1,6}\s/u.test(paragraph));
@@ -1169,16 +1194,17 @@ function renderDirectoryScan(report: DirectoryScanReport): string {
 }
 
 function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n  bun run check-output -- result.md --fix --baseline-floor --strict-human-voice --emit-folded -\n  bun run check-output -- README.md --readme-review --emit-grammar-marked -\n  bun run check-output -- --scan-dir references\n\n选项：\n  -f, --file <路径>\n  --scan-dir <目录路径>          批量扫描项目目录下所有 Markdown 文件，输出文本识别评判汇总报告\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用最低表达水平线（含文本识别评判）验收，未过线则总结论改为 FAIL\n  --text-judgment                启用文本识别评判门禁（readme表达审查 + 词句关键破解 + 类比真实度审查 + 语法识别），命中“ai生产”或语法错误则 FAIL\n  --readme-review                项目文件/README 审查模式：免除转换映射表要求，直接对文档执行文本识别评判门禁\n  --emit-grammar-marked <路径|-> 导出对主谓宾语序错误/英式倒装句/欧化句添加 Markdown 强调标记（**...**）后的全文\n  --fix                          落盘前去掉套话前缀、行首圆点、两三字指令短句，修正英式倒装与语序并合并过短段落\n  --chunk <k|all>                按二级标题逐块验收，任一块失败则总结论为 FAIL\n  --emit-folded <路径|->         校验通过后导出折叠呈现版（仅标题与干净正文，供直接交付读者）\n  --emit-annotated <路径|->      导出带追问内联标注的呈现版（格式：〔概念〕对应机制。适用边界。）\n  --emit-beginner-card <路径|->  导出面向零基础读者与低理解力人群的「小白一秒读懂卡」\n  --emit-gist <路径|->           导出切中观点的「极简白话与日常/游戏话术阐述报告」（适用于文言文、重复观点文章及快速抓主旨）\n  --habit <auto|gaming|daily|workplace> 指定导出话术映射时的用户习惯域（默认 auto）\n  --deterministic                人类可读输出收成一行；JSON 键序固定\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  文本识别评判          下辖 readme表达审查、词句关键破解、类比真实度审查（打“ai生产”标签）、外行复述锚点与语法识别（**强调标记**提取）\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n  bun run check-output -- result.md --fix --baseline-floor --strict-human-voice --emit-folded -\n  bun run check-output -- README.md --readme-review --emit-grammar-marked -\n  bun run check-output -- --scan-dir references\n\n选项：\n  -f, --file <路径>\n  --scan-dir <目录路径>          批量扫描项目目录下所有 Markdown 文件，输出文本识别评判汇总报告\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --author-profile <作家名或档位> 指定知名作家文体豁免档位（如 古龙/海明威/鲁迅/王小波 或 staccato_literary/dialectic_satire）\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用最低表达水平线（含文本识别评判）验收，未过线则总结论改为 FAIL\n  --text-judgment                启用文本识别评判门禁（readme表达审查 + 词句关键破解 + 类比真实度审查 + 语法识别），命中“ai生产”或语法错误则 FAIL\n  --readme-review                项目文件/README 审查模式：免除转换映射表要求，直接对文档执行文本识别评判门禁\n  --emit-grammar-marked <路径|-> 导出对主谓宾语序错误/英式倒装句/欧化句添加 Markdown 强调标记（**...**）后的全文\n  --fix                          落盘前去掉套话前缀、行首圆点、两三字指令短句，修正英式倒装与语序并合并过短段落\n  --chunk <k|all>                按二级标题逐块验收，任一块失败则总结论为 FAIL\n  --emit-folded <路径|->         校验通过后导出折叠呈现版（仅标题与干净正文，供直接交付读者）\n  --emit-annotated <路径|->      导出带追问内联标注的呈现版（格式：〔概念〕对应机制。适用边界。）\n  --emit-beginner-card <路径|->  导出面向零基础读者与低理解力人群的「小白一秒读懂卡」\n  --emit-gist <路径|->           导出切中观点的「极简白话与日常/游戏话术阐述报告」（适用于文言文、重复观点文章及快速抓主旨）\n  --habit <auto|gaming|daily|workplace> 指定导出话术映射时的用户习惯域（默认 auto）\n  --deterministic                人类可读输出收成一行；JSON 键序固定\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  文本识别评判          下辖 readme表达审查、词句关键破解、类比真实度审查（打“ai生产”标签）、外行复述锚点与语法识别（**强调标记**提取）\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
 }
 
-function parseArgs(argv: string[]): { file?: string; scanDir?: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean; enforceBaselineFloor: boolean; fix: boolean; chunk?: number | "all"; deterministic: boolean; emitFolded?: string; emitAnnotated?: string; emitBeginnerCard?: string; emitGist?: string; habit: UserHabitOption; textJudgment: boolean; readmeReview: boolean; emitGrammarMarked?: string } {
+function parseArgs(argv: string[]): { file?: string; scanDir?: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; authorProfile?: string; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean; enforceBaselineFloor: boolean; fix: boolean; chunk?: number | "all"; deterministic: boolean; emitFolded?: string; emitAnnotated?: string; emitBeginnerCard?: string; emitGist?: string; habit: UserHabitOption; textJudgment: boolean; readmeReview: boolean; emitGrammarMarked?: string } {
   const hanlp = parseHanLPCliOptions(argv);
   let file: string | undefined;
   let scanDir: string | undefined;
   let level: OutputLevel = "default";
   let factsPath: string | undefined;
   let expectedStyle: ExpressionStyle | undefined;
+  let authorProfile: string | undefined;
   let requireFacts = false;
   let json = false;
   let stsThreshold: number | undefined;
@@ -1343,12 +1369,19 @@ function parseArgs(argv: string[]): { file?: string; scanDir?: string; level: Ou
       index += 1;
       continue;
     }
+    if (arg === "--author-profile") {
+      const value = argv[index + 1];
+      if (!value) usageError("--author-profile 需要作家名或档位");
+      authorProfile = value;
+      index += 1;
+      continue;
+    }
     if (arg.startsWith("-")) usageError(`未知选项：${arg}`);
     if (file) usageError("只接受一个 Markdown 路径");
     file = arg;
   }
   if (!file && !scanDir) usageError("请提供 Markdown 路径或 --scan-dir <目录路径>");
-  return { file: file ? resolve(file) : undefined, scanDir: scanDir ? resolve(scanDir) : undefined, level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice, enforceBaselineFloor, fix, chunk, deterministic, emitFolded, emitAnnotated, emitBeginnerCard, emitGist, habit, textJudgment, readmeReview, emitGrammarMarked };
+  return { file: file ? resolve(file) : undefined, scanDir: scanDir ? resolve(scanDir) : undefined, level, factsPath: factsPath ? resolve(factsPath) : undefined, expectedStyle, authorProfile, requireFacts, json, hanlp, stsThreshold, maxDepDepth, strictHumanVoice, enforceBaselineFloor, fix, chunk, deterministic, emitFolded, emitAnnotated, emitBeginnerCard, emitGist, habit, textJudgment, readmeReview, emitGrammarMarked };
 }
 
 if (import.meta.main) {
@@ -1369,6 +1402,7 @@ if (import.meta.main) {
       level: args.level,
       factsPath: args.factsPath,
       expectedStyle: args.expectedStyle,
+      authorProfile: args.authorProfile,
       requireFacts: args.requireFacts,
       hanlpOptions: args.hanlp,
       stsThreshold: args.stsThreshold,

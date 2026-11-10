@@ -1,180 +1,88 @@
 ---
 name: conversion-skill
-description: "把复杂知识讲到外行能顺畅复述，并保留可核对的概念映射、事实依据和类比边界。默认采用轻快叙事（二次元/故事化），也支持侦探推理、项目战情室、自然纪录片、现代短诗、记叙文、播客对谈与中性直述。集成 HanLP 辅助能力以强化术语提取、语义角色骨架分析、语义保真校验、老妪能解可读性门禁与去 AI 腔人味检测。"
+description: "把复杂知识讲到外行能顺畅复述，并保留可核对的概念映射、事实依据和类比边界。默认首轮秒懂直出，按输入特征智能路由极简直述、日常/游戏话术映射或深度叙事（二次元/侦探/战情室/知名作家仿真等），集成单次管线与文体感知门禁。"
 license: MIT
-compatibility: "The Markdown skill is host-agnostic and has no runtime dependency. Optional local validation, evaluation, and HanLP NLP helper scripts support Bun/Node and optional HanLP RESTful/Native backends."
+compatibility: "Host-agnostic Markdown skill with zero runtime dependency. Optional Bun/TypeScript unified pipeline, PDF two-column navigator, and HanLP helper scripts."
 metadata:
   author: songhangze985-eng
-  version: "2.5.0"
+  version: "3.0.0"
 ---
 
 # conversion-skill
 
-可验证的复杂知识解释 Skill。我们的目标不是给专业术语硬套一层口语外皮，而是顺着普通人的直觉卡点把底层机制讲透，同时让每一个比喻都有据可查、有界可依。
+可验证的复杂知识解释与极简白话破译 Skill。核心目标不是给术语硬套口语外皮，而是顺着普通人的直觉卡点把底层机制讲透，让每个比喻都有据可查、有界可依。
 
-表达风格只是帮助读者建立直觉的桥梁：**事实优先于修辞，顺畅好懂优先于形式花哨。** 默认使用 `anime`（轻快角色叙事）；当用户点名其他文体，或某种风格反而增加理解负担时，立即切换为指定风格或 `neutral`（中性直述）。
+## 默认路由优先级（消除文体与叙述边界冲突）
 
-## 模型无关的最低表达程度水平线
+**事实优先于修辞，顺畅好懂优先于形式花哨。** 系统按以下严格优先级自动路由默认表达形态：
 
-无论宿主用哪一个模型，交稿都可以用 `bun run check-output -- <result.md> --fix --baseline-floor --strict-human-voice` 先整形再验收。未过线时总结论为 `FAIL`。默认不打开这两项开关，原有机械门禁保持不变。
+1. **P0 文言文 / 车轱辘重复议论文**：强制采用 `neutral` 极简直述，调用 `assets/knowledge/classical-chinese-kb.json`（含一词多义语境消歧）与关键词脱水直击要害，严禁编故事注水。
+2. **P1 短概念提问 / 日常首轮秒懂直出**：默认先给 1–2 段切中要害的大白话与日常/游戏习惯话术精准对位（如技能冷却、闸机放行），点透即止，不把几句话能说清的机制硬拉成长篇小说。
+3. **P2 完整多步机制深度叙事 / 用户点名写故事（选项 C）**：启用五步法叙事载体（默认故事皮肤为 `anime` 轻快角色叙事，或按指定切换 `detective`、`war-room`、`nature-documentary`、`verse`、`narrative`、`podcast` 及**仿真世界知名作者写法表达**）；若任何载体扭曲机制则立即回退 `neutral`。
+4. **P3 数学理化公式 / 学术论文 PDF**：公式先拆符号含义与整句大白话；论文先按 `references/paper-navigation.md` 抽取双栏坐标阅读序、核心方法章节与页码锚点，再按需展开。
 
-1. 除 `verse` 外，正文至少 3 个自然段，平均每段至少 2 句、60 字，单句成段占比不超过 30%。
-2. 去掉合法外国人名后，正文里的 `·` / `•` 必须为 0。非 `neutral` 的列表行不超过 10%。人味指数至少 75，且不用「总而言之 / 简单来说 / 想象一下」这类套话。
-3. 正文和知识点校验至少覆盖「痛点、动作、约束、结果」四段里的三段。定量结果要保留方向或数字。
-4. 四列映射至少 3 行，每一行的适用边界至少 6 个字，不能写「无 / 略 / 待填」。
-5. 连续无标点不超过 38 字。知识点校验至少 45 字。专业词要先在场景或映射里出现。`--fix` 会去掉套话前缀和行首圆点，并把过短的相邻句合成自然段。
+## 核心原则与最低表达水平线
 
-在工程辅助层，本项目支持以 [HanLP](https://github.com/hankcs/HanLP)（RESTful API 或本地 Native API）作为可选 NLP 辅助引擎，在不改变零依赖 Markdown 核心流程与现有全部 CLI 选项的前提下，增强中文与多语种分词（`tok`）、命名实体与术语识别（`ner`）、语义角色标注（`srl`）、依存句法复杂度检测（`dep`）、语义文本相似度核验（`sts`）、关键短语抽取（`keyphrase`）以及针对 Issue #1 的「去 AI 厕纸感（反一行一句 / 反 `·` 分点 / 人味节奏）」量化检测。
+1. **先抓痛点，再立事实骨架，最后选载体**：按「触发条件 -> 关键动作 -> 硬性限制 -> 最终结果」梳理机制，严禁编造原文没有的因果或数字。
+2. **整体场景同构，拒绝贴牌伪类比**：严禁把术语音译成假人名（如「皮沃特老师」「哈希先生」），严禁静态名词画等号（如「节点就是宾客」），严禁非人名居中圆点 `·` 造词。
+3. **动作先行，比喻有界**：先让读者看懂场景动作与卡点，再点出专业术语；幕后**四列映射表**（`知识概念 | 类比元素 | 对应机制 | 适用边界`）至少 3 行，每行适用边界至少 6 字（禁填「无/略/待填」）。
+4. **模型无关门禁与知名作家文体豁免**：除 `verse` 及冷峻短句文学档位（`--author-profile 古龙/海明威/契诃夫`）外，正文至少 3 个自然段、段均 ≥2 句且 ≥60 字、单句碎段率 ≤30%；辩证杂文档位（`鲁迅/王小波/刘震云`）豁免合理反讽对照，但全局严禁「先看看/别急」祈使短句、表情包泛滥与欧化倒装句。
+5. **2500 字以上分块门禁**：`--level long` 必须拆成 ≥3 个 `600–800` 字独立小节并保留 `<!-- [CHUNK_ANCHOR_k] -->`，逐块通过 `check-output --chunk <k>` 后再写下一节。
 
-## 3000 字以上的分块门禁
+## 资源与工具路由
 
-目标达到或超过 2500 字（`--level long`）时，不要一次写完全文。后半篇容易滑成一行一句，全文平均分也会把这一截盖住。
-
-1. 先运行 `bun run generate-template -- -t "<主题>" -l long --chunks <N>`。全文拆成幕后映射，外加 N 个独立小节，每节 600–800 字。N 默认 4，至少 3。
-2. 每个 `## 第 k 节` 标题下保留 `<!-- [CHUNK_ANCHOR_k] ... -->`。这行只给写作者看，不进入读者正文，计分前会去掉。
-3. 每写完一节就运行 `bun run check-output -- <result.md> --chunk <k> --baseline-floor --deterministic`。当前节通过后再写下一块。失败时只改这一节，不重写已经通过的前几节。
-
-## 缓存优先执行
-
-1. 同一轮按文件名排序读取要用的参考。已经读过、且没有改过的文件不要再读一遍。
-2. 列表和查找结果要排序。需要稳定输出时给脚本加 `--deterministic`。大型提取先看规模，不要把整份 JSON 打进对话。
-3. 用状态标记推进：`[MODE: PLAN]`、`[MODE: EXECUTE_CHUNK_k]`、`[MODE: VERIFY_CHUNK_k]`。套话剥离和碎段合并交给 `check-output --fix`。
-4. 依赖已经读过的材料来写分块时，留在当前会话里做。只有一次性的超长日志才拆出去。
-
-## 何时触发 (When to Use)
-
-当用户希望把抽象、拗口或复杂的知识讲明白，并需要可追溯的概念对照时触发。即使用户没有明确说「转换」，只要表达出「看不懂」「太抽象」「说人话」「通俗点讲」「用类比解释一下」等意图即可响应。
-
-**不适用场景 (Not for):** 只求一句定义且不需要解释机制；纯文学原创或小说续写；画图；中英互译；会议纪要；代码审查；仅从 PDF 导出原始文本。
-
-## 核心原则
-
-1. **先抓认知卡点，再立事实清单，最后选叙事载体**：绝不为了凑剧情而编造原文没有的因果、数据或结论。
-2. **用「整体生活场景」承载机制，拒绝「谐音造词式贴标签」**：不要把英文术语直接音译成尴尬的人名（如把 Pivot 叫成「皮沃特老师」），也不要用「概念·标签」式的居中圆点 `·` 强行造词。找一个动作、规则逻辑完全对齐的日常场景，让读者在场景里自然理解机制。
-3. **动作先行，术语点睛**：读者先在场景里看懂「遇到了什么麻烦、做了什么动作、撞上了什么限制」，再顺手点出这个动作在专业上叫什么。
-4. **比喻有边界，穿帮即换**：任何类比都有失效的地方。在映射表中诚实标出「适用边界」；如果某个风格不得不扭曲机制才能圆场，果断降档为 `neutral` 或切换更贴切的载体。
-5. **结构合法不等于听懂了，更要拒绝「AI 快餐文腔调」**：通过脚本格式检验只是底线，真正的标准是外行读完能用白话复述核心机制，且行文自然连贯、有真人讲述的呼吸感，不写「一行一句」的碎段落，不在叙事正文里堆砌 `·` 分点清单。
-6. **严守叙述边界：通俗易懂是日常/游戏话术精准映射，不是长篇大论编故事；遇文言文或重复观点文章则直击要害**：类比必须干净利落（优先顺应用户习惯，如用游戏 `CD`/蓝耗/仇恨/读档等日常话术一两句点透），严禁铺垫无关的世界观、风景或身世注水；面对反复强调同一观点的文章或文言文时，直接调用自建文言文翻译 JSON 知识库（`assets/knowledge/classical-chinese-kb.json`）与切中观点的关键词筛选工具（`scripts/screen-keywords.ts`），用最简洁的白话文切中要害向读者阐述。
-
-## 资源路由
-
-| 阶段 / 场景 | 读取或运行 |
+| 场景 / 阶段 | 按需读取参考文档或执行单次管线 |
 |---|---|
-| 第 2 步：区分原文事实、必要推导、类比与未确认信息 | `references/fact-traceability.md` |
-| 第 3 步：建立场景同构映射与适用边界 | `references/mapping-principles.md` |
-| 设定叙述边界（游戏/日常话术映射）及文言文/重复观点极简白话阐述 | `references/narrative-boundary-and-gist.md` + `assets/knowledge/classical-chinese-kb.json` |
-| 第 4 步：匹配表达文体 | 先读 `references/style-selector.md`，再只读所选文体的对应文件 |
-| 二次元 / 角色叙事 (默认) | `references/style-anime.md`；需要角色参考时读 `assets/templates/character-archetypes.md` |
-| 侦探推理 / 项目战情室 / 自然纪录片 | 分别读 `references/style-detective.md`、`references/style-war-room.md`、`references/style-nature-documentary.md` |
-| 现代短诗 / 记叙文 / 播客对谈 | 分别读对应的 `style-*.md` 与 `*-workflow.md` |
-| 状态机 / 并发协议 / 连续数学分布的可视化与交互微件 | `references/visual-interactive.md` |
-| 用户要求「一步步带我推 / 边问边讲 / 苏格拉底式启发」 | `references/socratic-microstep.md` |
-| 用户自述零基础小白、理解力弱、看天书或反馈「还是没看懂」 | `references/beginner-onboarding.md` |
-| 学术论文或 PDF 输入 | `references/paper-navigation.md` |
-| 第 5 步：老妪能解门槛与流畅度自检 | `references/lao-yu-gate.md` |
-| 文本识别评判（readme表达审查 / 词句关键破解 / 语法识别 / 类比真实度 / 复述锚点 / 叙述边界） | `references/text-recognition-judgment.md` |
-| 用户要求做理解测试 / 自测题 | `references/comprehension-check.md` |
-| 卡文、催更、万字长文请求或文件不可读 | `references/author-voice.md`（仅限状态回复，严禁混入正文） |
-| 查看各领域标杆写法 | `references/domain-examples.md` |
-| 用户明确要求长篇展开 | `references/long-article-engine.md` |
-| 内部完整稿排版骨架 | `assets/templates/article-output-template.md` |
-| 交稿呈现规则 (默认折叠) | `references/folded-presentation.md` |
-| 切中观点的关键词筛选、文言文知识库破译与日常/游戏话术映射 (可选 Bun) | `bun run screen-keywords -- "<文本或文件>" [--habit <auto\|gaming\|daily\|workplace>] [--top <N>] [--markdown]` |
-| 生成空白或 HanLP 智能预填骨架 (可选 Bun) | `bun run generate-template -- -t "<知识点>" -s <style> -l <default\|expand\|long> [--chunks <N>] [--source <文本或文件>] [--habit <auto\|gaming\|daily\|workplace>] [--hanlp]` |
-| 输入分流与 HanLP 术语/机制预分析 (可选 Bun) | `bun run validate-input -- "<输入>" [--paper] [--kind <auto\|text\|academic-paper>] [--hanlp] [--text-judgment] [--screen-keywords] [--habit <auto\|gaming\|daily\|workplace>]` |
-| 交稿前机械、极性/方向反转、文本识别评判及目录扫描 (可选 Bun) | `bun run check-output -- <result.md> --level <default\|expand\|long> --style <style> [--facts <路径>] [--hanlp] [--strict-human-voice] [--baseline-floor] [--text-judgment] [--readme-review] [--scan-dir <目录>] [--emit-grammar-marked <path\|->] [--emit-beginner-card <path\|->] [--emit-gist <path\|->] [--habit <auto\|gaming\|daily\|workplace>] [--chunk <k\|all>] [--emit-folded <path\|->] [--emit-annotated <path\|->] [--deterministic]` |
-| PDF 论文导航、图表/公式/伪代码抽取与评分卡 (可选 Bun) | `bun run evaluate-pdf -- <input.pdf> --workspace <dir> --style <style> [--result <md>] [--facts <json>] [--hanlp]` |
-| 离线确定性基准与 A/B/C 对照评测套件 (可选 Bun) | `bun run eval:suite [--deterministic \| --live --workspace <dir> --api-key <key>]` |
+| 一体化单次管线 / 导出纯 Web 独立版 SKILL (可选 Bun) | `bun run pipeline -- "<输入或-f文件>" [--game <名>] [--meme <梗>] [--author <名>] [--verify <稿.md>]` / `bun run pipeline -- --bundle-web <out.md>` |
+| 事实溯源 / 同构映射 / 叙述边界与文言脱水 | `references/fact-traceability.md`、`references/mapping-principles.md`、`references/narrative-boundary-and-gist.md` |
+| 文体选择与 8 大文体细则 / 长篇分块 / 折叠交稿 | `references/style-selector.md`、`references/style-*.md`、`references/long-article-engine.md`、`references/folded-presentation.md` |
+| 零基础小白冷启动 / 苏格拉底启发 / 理解自测 / 交互微件 | `references/beginner-onboarding.md`、`references/socratic-microstep.md`、`references/comprehension-check.md`、`references/visual-interactive.md` |
+| 论文双栏导航 / 老妪门禁 / 六维文本识别评判 / 多轮交互范例 | `references/paper-navigation.md`、`references/lao-yu-gate.md`、`references/text-recognition-judgment.md`、`references/interactive-pipeline-examples.md` |
+| 四大结构化 JSON 知识库（仅取 `StyleSpecCard` 槽位，禁照搬无关标本） | `assets/knowledge/gaming-kb.json`（12款热门游戏）、`life-memes-kb.json`、`classical-chinese-kb.json`、`story-authors-kb.json`（19位名家） |
+| 独立校验与 PDF 评测脚本 (可选 Bun) | `bun run check-output -- <稿.md> [--author-profile <作家>] [--fix] [--baseline-floor]`、`bun run evaluate-pdf -- <in.pdf> --workspace <dir> --style <style>` |
 
-## 转化工作流 (五步法)
+## 标准化用户交互流水线（首轮秒懂直出 + 四步交互链路）
 
-按顺序推进。第 1-3 步与门槛自检写入内部完整稿的 `<details>` 折叠区；默认向读者交稿时遵循 `references/folded-presentation.md`，只呈现干净的标题与正文，让阅读体验自然流畅。
+v3.0 默认采用**「首轮秒懂直出 + 渐进式微调」**：当用户直接发来具体概念、古文或段落且未要求先选菜单时，首轮立即给出精炼好懂的白话核心解释（快速通道直出 Stage 3），并在末尾提供轻量追问方向；当用户仅打招呼、明确想看处理方式菜单或点名下级定制时，严格按以下四步交互链路推进（完整多轮对话范例见 `references/interactive-pipeline-examples.md`）：
 
-### 0. 论文导航 (仅针对学术论文 / PDF)
+### Stage 1: 用户接入 Skill（问候与全格式接纳）
 
-先读 `references/paper-navigation.md`。从题目、摘要、方法与结论中提炼**临时事实清单**，并标记页码锚点（仅留在内部草稿）。
+- 当用户首次打招呼、闲聊或空泛接入时，原样输出固定问候语（字句完全一致）：
+  > “你好啊，我可以帮你把你不懂的话尽量转换成你能听懂的，告诉你！可以发我语句或文件来处理哦！文言文、文献这些都可以尝试呀”
+- 明确支持短句术语、长段论述、科研**文献**/PDF 与**文言文**古籍，严禁向普通读者倾倒命令行参数。
 
-- **HanLP 辅助增强**：运行 `evaluate-pdf.ts --hanlp` 时，自动调用 HanLP 的多语种分句、抽取式自动摘要、关键词短语提取（`keyphrase`）与命名实体识别（`ner`），从 Abstract / Method / Conclusion 页提炼候选事实条目与 `required_terms` 词表。
-- 若文本层损坏、图文矛盾或缺失关键机制说明，直接向用户说明缺口并请求补充，绝不盲猜。
+### Stage 2: 输入预检、顶层选项与 2~3 级下级询问（含写故事与快速通道）
 
-### 1. 抓痛点与定范围 (理解)
+- **快速通道（极速通道 / Express-Lane）**：用户输入已含明确口令（如 `“用【王者荣耀】的理解方式打开”`、`“用甩锅讲讲”`、`“仿真王小波写故事”`）或直接求解释时，免除机械盘问，直接穿透至 Stage 3 交付。
+- **第 1 级四大处理选项**（当用户需要选择处理路径时呈现，将原写故事完整并入阶段二）：
+  - **选项 A：【极简直述·直击要害】**（文言文信达雅翻译 / 重复观点脱水 / 最简大白话）
+  - **选项 B：【场景转译·习惯对位】**（游戏设定名词 / 网络流行热梗 / 日常生活话术）
+  - **选项 C：【深度叙事·风格成文（写故事）】**（支持**仿真世界知名作者写法表达** `assets/knowledge/story-authors-kb.json` 及 7 大故事文体皮肤）
+  - **选项 D：【循序启发·苏格拉底】**（微步问答引导；标注说明：**具体输出效果由 Agent 本身性能决定而不是 Skill**）
+- **第 2~3 级下级询问规范**：
+  1. **选 A（极简直述）**：询问选 ① 一句话极简脱水、② 文言文「信、达、雅」翻译（查 `classical-chinese-kb.json` 并执行一词多义消歧），还是 ③ 核心靶心词 + 防坑清单。
+  2. **选 B（场景转译）**：第 2 级询问：“你是选 **【游戏】**、**【网络热梗】** 还是 **【日常话术】** 呢？”
+     - **选【游戏】**：询问具体游戏名（例如输入 `“王者荣耀这款手游”`）-> 查 `gaming-kb.json` 提取专属机制槽位；若所点游戏未入库（`matched: false`），诚实保留用户指定的游戏名做动态同构映射，严禁静默替换成其他游戏。
+     - **选【网络热梗】**：**用户没有那么多分类判断力**，不抛分类标签，**直接让用户说出具体的网络热梗**（如「甩锅」「草台班子」「硬控」）-> 查 `life-memes-kb.json` 对位。
+     - **选【日常话术】**：**日常话术不需要任何第 3 级询问**，**不需要再做下级询问，直接执行**生活场景转换！
+  3. **选 C（写故事）**：询问选 ① **仿真世界知名作者写法表达**（点名鲁迅、王小波、刘慈欣、古龙、金庸、张爱玲、刘震云、海明威等，查 `assets/knowledge/story-authors-kb.json` 提取 `StyleSpecCard` 围绕本次概念槽位全新创作，库外作家诚实保留原名动态仿真，严禁照搬无关标本）或 ② 经典故事文体与篇幅档位。
+  4. **选 D（循序启发）**：透明声明「具体输出效果由 Agent 本身性能决定而不是 Skill」，询问认知起点与微步互动形式。
 
-用大白话回答两件事：
+### Stage 3: 省略中间推导步骤直接交付 + 语境感知固定尾缀
 
-- **核心问题**：这个机制到底要解决什么麻烦？如果不用它、按最笨的直觉做，会卡在哪里？
-- **本次范围**：本次解释聚焦哪一环？（论文默认聚焦「核心贡献」，用户点名具体章节或公式时按指定范围。）
+- **省略中间推导步骤**：首轮只交付干净、段落饱满（2–5 句成段）的转换正文，严禁倾倒 `<details>` 草稿、映射表或门禁分。
+- **阶段三固定结尾提示与语境感知引导**（正文末尾按顺序附上两行）：
+  1. **过程已省略**（要不要把过程拉出来给你看？）
+  2. 语境感知引导（通用/技术概念默认紧跟 `你可以试试说：用【游戏名】的理解方式打开`，例如 `你可以试试说：用【王者荣耀】的理解方式打开`；文言文与学术文献则优先推荐古今异义防坑表或方法公式追问，同时兼容游戏方式打开）。
 
-### 2. 提炼事实骨架 (提炼)
+### Stage 4: 等待回复并分步迭代
 
-按「触发条件 (输入) -> 关键动作与先后顺序 -> 硬性限制 (约束/终止条件) -> 最终结果 (输出)」梳理事实清单。结合 `references/fact-traceability.md`，严格区分：
+- **快捷重译**：响应 `“用【游戏名】的理解方式打开”`，实时调取对应游戏机制词重译。
+- **分支 A（过程展开）**：完整展开幕后**四列映射表**、**事实骨架**（痛点 -> 动作 -> 约束 -> 结果）、文言信达雅拆解与 `**知识点校验**`。
+- **分支 B（篇幅微调）**：在一句话极简、`default`（≤800字）、`expand`（800–2500字）与 `long`（分块长篇；万字水文请求按 `references/author-voice.md` 回应）间切换。
+- **分支 C（风格切换）**：100% 锁死事实骨架，无缝切换游戏设定、具体热梗、知名作家笔法或故事文体。
+- **分支 D（反向修正）**：读者反馈没看懂或比喻别扭时，回到事实骨架更换更直观的生活同构场景重写并重过老妪门禁。
 
-- **原文事实**：资料明确给出的机制与条件
-- **必要推导**：为把逻辑链条串通而必经的合理推论
-- **理解类比**：仅用于搭建直觉的生活经验 (绝不冒充原文事实)
-- **尚未确认**：原文未提及或存疑的部分
+## 幕后转化五步法速览
 
-- **HanLP 辅助增强（SRL 语义角色标注）**：利用 HanLP 的 `srl` 任务自动识别源文本中的施事（`ARG0`）、核心动作谓词（`PRED`）、受事（`ARG1`）以及时间/条件/方式修饰（`ARGM-TMP`、`ARGM-CND`、`ARGM-MNR`），辅助快速提取客观「条件 -> 动作 -> 限制 -> 结果」骨架，防止漏掉隐含前置约束。
-- 遇到数学公式时，先用一句话讲清「这个公式在帮我们算什么、为什么要这么算」，再拆解符号。
-
-### 3. 搭建生活场景与同构映射 (意象映射)
-
-不要急着给术语起外号，先找一个**整体逻辑同构的日常场景**（参见 `references/mapping-principles.md`）。
-
-在内部完整稿中输出四列映射表：`知识概念 | 类比元素 | 对应机制 | 适用边界`（兼容旧版三列表）。
-
-- **HanLP 辅助增强（自定义词典与术语提取）**：支持通过 HanLP `tok/fine`、`ner` 与自定义领域词典（强制、合并、校正规则）锁定不可拆分的专业术语，自动填入映射表首列「知识概念」，确保核心术语无一遗漏。
-- 重点核对：场景里的动作顺序、卡点限制，是否与原机制严丝合缝？这个比喻推到哪一步会失效？如果怎么凑都很别扭，直接改用 `neutral`（中性直述）。
-
-### 4. 自然叙事转化 (写作)
-
-按 `references/style-selector.md` 选择最贴合机制形态的表达方式。无论哪种文体，都遵循**真实写作的呼吸感（去 AI 厕纸感铁律）**：
-
-- **从具体处切入**：第一句话直接把读者带进问题情境，不写「在现代计算机科学中」「让我们先想象一下」之类的空洞报幕词。
-- **段落饱满成块，拒绝「一行一句」**：除 `verse`（现代短诗）外，正文必须以 2–5 句构成的完整自然段推进，长短句自然交错，严禁像营销号一样每写一句话就换一行。
-- **顺着因果推进**：让「约束条件」作为场景里自然撞上的阻碍出现（比如「分到只剩一个人，没法再比了，自然停下」），而不是生硬地背诵规则。
-- **正文依靠动作推进，拒绝「`·` 分点」与清单体**：结构化对照已经放在幕后映射表里，公开正文必须像真人讲故事或复盘一样顺着因果链往下走，严禁在叙事正文里使用居中圆点 `·` 分点、生造 `概念·外号` 标签词，或把故事拆成一二三四的 bullet 清单。
-- **收束在一句洞察**：结尾用一句干净、有记忆点的大白话点破核心逻辑，不写「总而言之、综上所述」式的总结套话。
-
-| 篇幅档 | 触发条件 | 正文长度 |
-|---|---|---|
-| `default` | 默认未声明 | **<= 800 字**（短小精悍，一气呵成） |
-| `expand` | 用户要求「详细讲讲」「展开说说」「写成完整文章」 | 800-2500 字 |
-| `long` | 用户明确要求长篇或连载 | 读 `long-article-engine.md`；若索要万字水文先按 `author-voice.md` 回应 |
-
-### 5. 老妪能解门槛与知识点校验 (自检)
-
-写完正文后，按 `references/lao-yu-gate.md` 朗读自检：把角色名和修辞遮住，一个没学过该领域的外行能不能顺畅听懂、并用一句话复述？如果有拗口的翻译腔、未解释的黑话、一行一句的碎段落、或者 AI 味浓重的 `·` 分点，立即删改。
-
-- **HanLP 辅助增强（依存句法可读性、去 AI 味人味门禁与 STS 语义核验）**：
-  - **长难句与翻译腔检测（`dep`）**：通过计算句子依存句法树深度与单句词元数，自动预警嵌套过深、修饰过长的拗口句子。
-  - **去 AI 厕纸感与人味检测（`human_voice_score`）**：自动统计单句成段率（拦截「一行一句」）、非人名实体 `·` 符号频次（拦截 `·` 分点与造词）、正文列表行占比、句长变异系数（Burstiness）与 AI 高频套话。
-  - **未解释黑话检测（`tok` + `pos` + `ner`）**：识别在正文中直接出现但未在映射表或前文动作铺垫中解释的专业术语。
-  - **语义保真度核验（`sts`）**：计算转化正文/知识点校验段落与事实账本 `claim` 的语义文本相似度（STS），解决字面 `includes` 无法识别白话同义改写的问题。
-  - **文本识别评判（`text_recognition_judgment`）**：详见 `references/text-recognition-judgment.md`，下设五项子评判：
-    - **readme表达审查（`readme_expression_review`）**：识别项目文件或说明文档中多表情元素，或分段严重且说明过于标准化的表达，一旦命中即打上 `ai生产` 标签。
-    - **词句关键破解（`micro_sentence_cracker`）**：全局检索两字或三字独立短句（如 `先看看`、`别急` 等指令短句）、设问自答过渡壳、高频「不是…而是…」排比成瘾与伪金句拔高收尾，命中即打上 `ai生产` 标签。
-    - **语法识别（`grammar_inspection`）**：识别主谓宾语序错误、英式思维倒装句、欧化长定语「的」字堆叠、欧化弱被动与无生命复数「们」，自动使用 Markdown 强调标记（`**...**`）提取高亮并生成改写建议。
-    - **类比真实度审查（`analogy_authenticity_review`）**：拦截「术语+人名头衔」（如 `哈希先生`、`皮沃特老师`）等贴标签式伪类比与未落入正文的空转映射。
-    - **外行复述锚点（`layperson_retelling_anchor`）**：自动提取文中因果完整、短促好懂的一句话白话复述锚点并评估复述友好度。
-    - **小白友好度评估（`beginner_friendliness`）**：拦截「其实很简单/显而易见」等居高临下词，检测前 45 字零黑话冷启动、小句工作记忆负荷与日常体感锚点，支持 `--emit-beginner-card <path|->` 导出「小白一秒读懂卡」。
-    - **叙述边界审查（`narrative_boundary_review`）**：拦截「在很久很久以前/阳光透过窗户洒在」等无机制增量的长篇故事注水，识别游戏/日常/职场话术映射锚点，支持 `--emit-gist <path|->` 导出「切中观点·极简白话阐述报告」。
-
-过关后，在内部完整稿末尾补上 `**知识点校验**`：用 1-3 句平实、严谨的技术/学术语言复核核心事实与边界，与正文形成精准对照。
-
-### 6. 理解检验 (可选，默认关闭)
-
-仅当用户主动要求「考考我」「检查我懂没懂」时，读取 `references/comprehension-check.md`，附上一道核心机制复述题和一道跨场景迁移题。
-
-## 内部完整稿骨架与交稿规则
-
-内部完整稿遵循 `assets/templates/article-output-template.md`，标题下方保留两行元信息：
-
-> 表达风格：`<anime|detective|war-room|nature-documentary|verse|narrative|podcast|neutral>`
-> 篇幅：`<default|expand|long>`
-
-- **默认交稿 (`folded`)**：直接展示标题与打磨好的正文，把繁琐的分析表格留在幕后；当用户追问某个比喻的依据或要求查看完整分析时，再展开对应映射与边界。
-- **操作步骤类输入**：如软件操作指南、配置流程，优先采用 `neutral` 或轻度类比，必须保留清晰的可执行步骤清单，不要把操作步骤揉碎在剧情里。
-
-## 反向修正
-
-当用户反馈「没看懂」或「某处不对」时：先回到第 2 步核对事实清单 -> 检查第 3 步是不是比喻选歪了 -> 换一个更贴切的生活经验重写对应段落 -> 重新过门禁。绝不用更花哨的辞藻去掩盖逻辑硬伤。
+Stage 3 幕后按顺序执行：**0. 论文双栏导航**（PDF 坐标排序 + 公式完整性预警 + 页码锚点）-> **1. 抓痛点定范围** -> **2. 提炼事实骨架**（区分原文事实、必要推导、理解类比、尚未确认）-> **3. 搭建四列同构映射与适用边界** -> **4. 自然叙事写作**（动作先行、拒绝一行一句与 `·` 分点）-> **5. 老妪能解自检与知识点校验**（可选第 6 步理解检验默认关闭，仅在用户主动要求测试时开启）。
