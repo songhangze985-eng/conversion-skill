@@ -46,12 +46,263 @@ export interface CanonicalClassicalPassage {
   pithy_vernacular: string;
   core_thesis: string;
   thesis_keywords: string[];
+  xindaya_breakdown?: {
+    xin_faithfulness: string;
+    da_expressiveness: string;
+    ya_elegance: string;
+  };
   habit_mappings: Record<UserHabit, string>;
+}
+
+export type GameGenre =
+  | "MMO"
+  | "MOBA"
+  | "ARPG_SOULS"
+  | "GACHA_RPG"
+  | "FTG"
+  | "ROGUELIKE"
+  | "STRATEGY_RTS"
+  | "FPS_BR"
+  | "UNIVERSAL";
+
+export type GameMechanicCategory =
+  | "resource_management"
+  | "combat_action_flow"
+  | "threat_and_targeting"
+  | "crowd_control_defense"
+  | "progression_economy"
+  | "frame_and_timing"
+  | "spatial_and_vision"
+  | "system_and_meta";
+
+export interface GamingConversionExample {
+  source_concept: string;
+  game_analogy_output: string;
+  boundary_limitation: string;
+}
+
+export interface GamingMechanicEntry {
+  id: string;
+  term_zh: string;
+  term_en: string;
+  aliases: string[];
+  genre: GameGenre;
+  category: GameMechanicCategory;
+  mechanic_definition: string;
+  abstract_concept_mapping: string[];
+  real_life_analogy: string;
+  narrative_boundary_tip: string;
+  conversion_examples: GamingConversionExample[];
+}
+
+export interface PopularGameSignatureTerm {
+  term: string;
+  mechanic_id: string;
+  concept_keywords: string[];
+  analogy_explanation: string;
+}
+
+export interface PopularGameProfile {
+  game_id: string;
+  game_name: string;
+  aliases: string[];
+  genre: GameGenre;
+  platform: string;
+  linked_mechanic_ids: string[];
+  signature_terms: PopularGameSignatureTerm[];
+  open_with_game_template: string;
+}
+
+export interface StyleSpecCard {
+  mode: "gaming" | "life_meme" | "author_style";
+  matched_in_kb: boolean;
+  requested_entity: string;
+  resolved_entity: string;
+  target_concept_slots: string[];
+  core_constraints: string[];
+  anti_slop_guardrail: string;
+  unmatched_guidance?: string;
+  few_shot_sample_notice: string;
+}
+
+export interface GameSpecificQueryResult {
+  matched: boolean;
+  requested_game?: string;
+  game_name: string;
+  genre: GameGenre;
+  platform: string;
+  matched_signature_terms: PopularGameSignatureTerm[];
+  linked_mechanics: GamingMechanicEntry[];
+  style_spec_card?: StyleSpecCard;
+  unmatched_guidance?: string;
+  stage3_direct_output: string;
+  stage3_process_omitted_notice: string;
+  stage3_followup_prompt: string;
+}
+
+export interface GamingKnowledgeBase {
+  schema_version: string;
+  name: string;
+  description: string;
+  metadata: {
+    author: string;
+    last_updated: string;
+    total_entries: number;
+  };
+  genres: GameGenre[];
+  mechanic_categories: GameMechanicCategory[];
+  popular_games?: PopularGameProfile[];
+  entries: GamingMechanicEntry[];
+}
+
+export type LifeMemeCategory =
+  | "internet_memes"
+  | "workplace_social"
+  | "colloquialisms_idioms"
+  | "life_metaphors";
+
+export type EmotionalTone =
+  | "humorous"
+  | "self_deprecating"
+  | "sarcastic"
+  | "warning"
+  | "neutral"
+  | "empathic"
+  | "critical"
+  | "constructive";
+
+export interface LifeMemeConversionExample {
+  source_concept: string;
+  colloquial_output: string;
+  boundary_limitation: string;
+}
+
+export interface LifeMemeEntry {
+  id: string;
+  term: string;
+  pinyin_or_source: string;
+  aliases: string[];
+  category: LifeMemeCategory;
+  emotional_tone: EmotionalTone;
+  literal_meaning: string;
+  pragmatic_meaning: string;
+  layman_explanation: string;
+  abstract_concept_mapping: string[];
+  narrative_boundary_tip: string;
+  conversion_examples: LifeMemeConversionExample[];
+}
+
+export interface LifeMemesKnowledgeBase {
+  schema_version: string;
+  name: string;
+  description: string;
+  metadata: {
+    author: string;
+    last_updated: string;
+    total_entries: number;
+  };
+  categories: LifeMemeCategory[];
+  emotional_tones: EmotionalTone[];
+  entries: LifeMemeEntry[];
+}
+
+export type LiteraryTradition =
+  | "chinese_modern_classic"
+  | "hard_scifi_speculative"
+  | "detective_suspense"
+  | "minimalist_realism"
+  | "satire_black_humor"
+  | "master_science_storyteller"
+  | "philosophical_fable";
+
+export interface NarrativeTechniqueEntry {
+  technique_id: string;
+  name: string;
+  core_rule: string;
+  applicable_mechanisms: string[];
+}
+
+export interface AuthorStyleConversionExample {
+  source_concept: string;
+  author_style_output: string;
+  boundary_limitation: string;
+}
+
+export interface StoryAuthorEntry {
+  id: string;
+  author_name_zh: string;
+  author_name_en: string;
+  aliases: string[];
+  tradition: LiteraryTradition;
+  linked_skill_style: string;
+  signature_voice_traits: string[];
+  sentence_rhythm_and_diction: string;
+  anti_slop_guardrail: string;
+  best_suited_concepts: string[];
+  conversion_examples: AuthorStyleConversionExample[];
+}
+
+export interface StoryAuthorsKnowledgeBase {
+  schema_version: string;
+  name: string;
+  description: string;
+  metadata: {
+    author: string;
+    last_updated: string;
+    total_authors: number;
+    total_narrative_techniques: number;
+  };
+  literary_traditions: LiteraryTradition[];
+  narrative_techniques: NarrativeTechniqueEntry[];
+  authors: StoryAuthorEntry[];
+}
+
+export interface LifeMemeSpecificQueryResult {
+  matched: boolean;
+  requested_meme?: string;
+  meme_term: string;
+  matched_entries: LifeMemeEntry[];
+  style_spec_card?: StyleSpecCard;
+  unmatched_guidance?: string;
+  stage3_direct_output: string;
+  stage3_process_omitted_notice: string;
+  stage3_followup_prompt: string;
+}
+
+export interface AuthorStyleQueryResult {
+  matched: boolean;
+  requested_author?: string;
+  fallback_reference_author?: string;
+  author_name_zh: string;
+  author_name_en: string;
+  tradition: LiteraryTradition;
+  linked_skill_style: string;
+  signature_voice_traits: string[];
+  sentence_rhythm_and_diction: string;
+  anti_slop_guardrail: string;
+  conversion_examples: AuthorStyleConversionExample[];
+  style_spec_card?: StyleSpecCard;
+  unmatched_guidance?: string;
+  stage3_direct_output: string;
+  stage3_process_omitted_notice: string;
+  stage3_followup_prompt: string;
 }
 
 export interface HabitAnalogyLexiconEntry {
   concept_keywords: string[];
   daily_lingo: string;
+}
+
+export interface PolysemySenseRule {
+  context_regex: string;
+  sense_label: string;
+  vernacular_replacement: Array<[string, string]>;
+  note: string;
+}
+
+export interface PolysemyDisambiguationEntry {
+  char: string;
+  senses: PolysemySenseRule[];
 }
 
 export interface ClassicalChineseKnowledgeBase {
@@ -62,6 +313,7 @@ export interface ClassicalChineseKnowledgeBase {
   lexical_entries: ClassicalLexicalEntry[];
   canonical_passages: CanonicalClassicalPassage[];
   habit_analogy_lexicon: Record<UserHabit, HabitAnalogyLexiconEntry[]>;
+  polysemy_disambiguation?: PolysemyDisambiguationEntry[];
 }
 
 export interface NarrativeBoundarySpec {
@@ -88,6 +340,13 @@ export interface HabitAnalogyMapping {
   daily_lingo_mapping: string;
 }
 
+export interface PolysemyResolutionHit {
+  char: string;
+  matched_phrase: string;
+  sense_label: string;
+  note: string;
+}
+
 export interface ClassicalTranslationResult {
   is_classical: boolean;
   classical_density: number;
@@ -101,6 +360,7 @@ export interface ClassicalTranslationResult {
     explanation: string;
   }>;
   matched_lexical_glosses: ClassicalLexicalEntry[];
+  polysemy_disambiguations?: PolysemyResolutionHit[];
   sentence_by_sentence: Array<{
     classical: string;
     vernacular: string;
@@ -120,17 +380,32 @@ export interface KeywordScreeningReport {
   pithy_vernacular_summary: string;
   habit_analogy_mappings: HabitAnalogyMapping[];
   classical_translation?: ClassicalTranslationResult;
+  selected_game_query?: GameSpecificQueryResult;
+  selected_meme_query?: LifeMemeSpecificQueryResult;
+  selected_author_query?: AuthorStyleQueryResult;
 }
 
 export interface ScreenKeywordsOptions {
   habit?: UserHabitOption;
+  gameTitle?: string;
+  memeTerm?: string;
+  authorName?: string;
   topK?: number;
   kbPath?: string;
+  gamingKbPath?: string;
+  lifeMemesKbPath?: string;
+  storyAuthorsKbPath?: string;
 }
 
 const DEFAULT_KB_PATH = resolve(import.meta.dir, "../assets/knowledge/classical-chinese-kb.json");
+const DEFAULT_GAMING_KB_PATH = resolve(import.meta.dir, "../assets/knowledge/gaming-kb.json");
+const DEFAULT_LIFE_MEMES_KB_PATH = resolve(import.meta.dir, "../assets/knowledge/life-memes-kb.json");
+const DEFAULT_STORY_AUTHORS_KB_PATH = resolve(import.meta.dir, "../assets/knowledge/story-authors-kb.json");
 
 let cachedDefaultKb: ClassicalChineseKnowledgeBase | null = null;
+let cachedDefaultGamingKb: GamingKnowledgeBase | null = null;
+let cachedDefaultLifeMemesKb: LifeMemesKnowledgeBase | null = null;
+let cachedDefaultStoryAuthorsKb: StoryAuthorsKnowledgeBase | null = null;
 
 export function loadClassicalKnowledgeBase(customPath?: string): ClassicalChineseKnowledgeBase {
   if (!customPath && cachedDefaultKb) return cachedDefaultKb;
@@ -141,6 +416,379 @@ export function loadClassicalKnowledgeBase(customPath?: string): ClassicalChines
   const parsed = JSON.parse(readFileSync(target, "utf8")) as ClassicalChineseKnowledgeBase;
   if (!customPath) cachedDefaultKb = parsed;
   return parsed;
+}
+
+export function loadGamingKnowledgeBase(customPath?: string): GamingKnowledgeBase {
+  if (!customPath && cachedDefaultGamingKb) return cachedDefaultGamingKb;
+  const target = customPath ? resolve(customPath) : DEFAULT_GAMING_KB_PATH;
+  if (!existsSync(target)) {
+    usageError(`未找到游戏设定 JSON 知识库：${target}`);
+  }
+  const parsed = JSON.parse(readFileSync(target, "utf8")) as GamingKnowledgeBase;
+  if (!customPath) cachedDefaultGamingKb = parsed;
+  return parsed;
+}
+
+export function loadLifeMemesKnowledgeBase(customPath?: string): LifeMemesKnowledgeBase {
+  if (!customPath && cachedDefaultLifeMemesKb) return cachedDefaultLifeMemesKb;
+  const target = customPath ? resolve(customPath) : DEFAULT_LIFE_MEMES_KB_PATH;
+  if (!existsSync(target)) {
+    usageError(`未找到生活网络热梗 JSON 知识库：${target}`);
+  }
+  const parsed = JSON.parse(readFileSync(target, "utf8")) as LifeMemesKnowledgeBase;
+  if (!customPath) cachedDefaultLifeMemesKb = parsed;
+  return parsed;
+}
+
+export function loadStoryAuthorsKnowledgeBase(customPath?: string): StoryAuthorsKnowledgeBase {
+  if (!customPath && cachedDefaultStoryAuthorsKb) return cachedDefaultStoryAuthorsKb;
+  const target = customPath ? resolve(customPath) : DEFAULT_STORY_AUTHORS_KB_PATH;
+  if (!existsSync(target)) {
+    usageError(`未找到世界知名作者写法 JSON 知识库：${target}`);
+  }
+  const parsed = JSON.parse(readFileSync(target, "utf8")) as StoryAuthorsKnowledgeBase;
+  if (!customPath) cachedDefaultStoryAuthorsKb = parsed;
+  return parsed;
+}
+
+export function buildContextAwareFollowupPrompt(
+  sourceText = "",
+  options?: { preferredGame?: string; preferredAuthor?: string },
+): string {
+  if (options?.preferredGame?.trim()) {
+    return `你可以试试说：用【${options.preferredGame.trim()}】的理解方式打开`;
+  }
+  const trimmed = sourceText.trim();
+  if (trimmed.length >= 6 && isClassicalChineseText(trimmed)) {
+    return "你可以试试说：把信达雅与古今异义过程拉出来看，或用【汪曾祺】的写法打开";
+  }
+  if (
+    trimmed.length >= 20 &&
+    /(?:摘\s*要|abstract|introduction|methodology|定理|证明|\$\$|\\frac|\\sum|arXiv)/iu.test(trimmed)
+  ) {
+    return "你可以试试说：把幕后四列映射表拉出来看，或用【理查德·费曼】的写法打开";
+  }
+  return "你可以试试说：用【王者荣耀】的理解方式打开";
+}
+
+function extractTargetConceptSlots(sourceText: string): string[] {
+  if (!sourceText.trim()) return [];
+  const raw = segmentTextLocal(sourceText.trim()).filter(
+    (t) =>
+      /^[\u4e00-\u9fffA-Za-z0-9-]{2,12}$/u.test(t) &&
+      !STOPWORDS_SCREEN.has(t.toLocaleLowerCase())
+  );
+  return [...new Set(raw)].slice(0, 6);
+}
+
+export function queryGameTermsByTitle(
+  gameInput: string,
+  sourceText = "",
+  gamingKb?: GamingKnowledgeBase,
+): GameSpecificQueryResult {
+  const gkb = gamingKb ?? loadGamingKnowledgeBase();
+  const games = gkb.popular_games ?? [];
+  const cleanedInput = gameInput
+    .replace(/^(?:用)?[【《「\[\(]?/u, "")
+    .replace(/[】》」\]\)]?(?:的理解方式打开|这款(?:手|端|网)?游)?$/u, "")
+    .trim();
+  const loweredGame = cleanedInput.toLocaleLowerCase();
+
+  const matchedProfile = games.find(
+    (g) =>
+      loweredGame.length > 0 &&
+      (g.game_name.toLocaleLowerCase() === loweredGame ||
+        loweredGame.includes(g.game_name.toLocaleLowerCase()) ||
+        g.aliases.some(
+          (alias) =>
+            alias.toLocaleLowerCase() === loweredGame ||
+            loweredGame.includes(alias.toLocaleLowerCase())
+        ))
+  );
+
+  const loweredSource = sourceText.toLocaleLowerCase();
+  const targetSlots = extractTargetConceptSlots(sourceText);
+
+  if (matchedProfile) {
+    const matchedSig = matchedProfile.signature_terms.filter((st) =>
+      st.concept_keywords.some((kw) => loweredSource.includes(kw.toLocaleLowerCase()))
+    );
+    const effectiveSig =
+      matchedSig.length > 0 ? matchedSig : matchedProfile.signature_terms.slice(0, 3);
+
+    const linkedMechanics = gkb.entries.filter((e) =>
+      matchedProfile.linked_mechanic_ids.includes(e.id)
+    );
+
+    const style_spec_card: StyleSpecCard = {
+      mode: "gaming",
+      matched_in_kb: true,
+      requested_entity: cleanedInput || matchedProfile.game_name,
+      resolved_entity: matchedProfile.game_name,
+      target_concept_slots: targetSlots,
+      core_constraints: effectiveSig.map((st) => `${st.term} -> ${st.analogy_explanation}`),
+      anti_slop_guardrail: "单点机制类比控制在 1–2 句以内，严禁编造与源概念无关的对局战报或角色背景故事。",
+      few_shot_sample_notice: "以下词条为游戏机制映射槽位；宿主模型须围绕本次目标概念槽位动态生成正文，严禁答非所问照搬静态例句。",
+    };
+
+    const termLines = effectiveSig.map((st) => `- **${st.term}**：${st.analogy_explanation}`);
+    const stage3_process_omitted_notice = "过程已省略";
+    const stage3_followup_prompt = buildContextAwareFollowupPrompt(sourceText, {
+      preferredGame: matchedProfile.game_name,
+    });
+    const slotLine =
+      targetSlots.length > 0
+        ? `- **本次待对位核心概念槽位**：${targetSlots.join("、")}`
+        : "";
+    const stage3_direct_output = [
+      `### 【游戏机制转换规约卡 · ${matchedProfile.game_name}】`,
+      "",
+      matchedProfile.open_with_game_template,
+      ...(slotLine ? [slotLine, ""] : [""]),
+      ...termLines,
+      "",
+      `> ${stage3_process_omitted_notice}`,
+      `> ${stage3_followup_prompt}`,
+    ].join("\n");
+
+    return {
+      matched: true,
+      requested_game: cleanedInput || matchedProfile.game_name,
+      game_name: matchedProfile.game_name,
+      genre: matchedProfile.genre,
+      platform: matchedProfile.platform,
+      matched_signature_terms: effectiveSig,
+      linked_mechanics: linkedMechanics,
+      style_spec_card,
+      stage3_direct_output,
+      stage3_process_omitted_notice,
+      stage3_followup_prompt,
+    };
+  }
+
+  // Honest fallback for any custom game name not yet in popular_games (no silent spoofing!)
+  const fallbackMechanics = gkb.entries.slice(0, 3);
+  const fallbackSig: PopularGameSignatureTerm[] = fallbackMechanics.map((m) => ({
+    term: m.term_zh,
+    mechanic_id: m.id,
+    concept_keywords: m.abstract_concept_mapping,
+    analogy_explanation: m.conversion_examples[0]?.game_analogy_output ?? m.mechanic_definition,
+  }));
+  const displayGameName = cleanedInput || "通用游戏机制";
+  const unmatched_guidance = `知识库尚未内置《${displayGameName}》专属词表（matched=false）。请宿主模型直接调用自身关于《${displayGameName}》的真实核心玩法机制完成同构对位，下方通用机制仅作结构参考，严禁指鹿为马冒充其他游戏。`;
+  const style_spec_card: StyleSpecCard = {
+    mode: "gaming",
+    matched_in_kb: false,
+    requested_entity: displayGameName,
+    resolved_entity: displayGameName,
+    target_concept_slots: targetSlots,
+    core_constraints: fallbackSig.map((st) => `通用机制参考：${st.term}`),
+    anti_slop_guardrail: "若宿主模型不熟悉该冷门游戏细节，应主动说明并退回通用 CD/血条/存档机制，严禁瞎编不存在的技能名。",
+    unmatched_guidance,
+    few_shot_sample_notice: "下方为通用游戏机制参考模板，请替换为目标游戏的真实设定动态作答。",
+  };
+  const stage3_process_omitted_notice = "过程已省略";
+  const stage3_followup_prompt = `你可以试试说：用【${cleanedInput || "王者荣耀"}】的理解方式打开`;
+  const stage3_direct_output = [
+    `### 【未内置游戏动态规约卡 · ${displayGameName}（库外诚实回退）】`,
+    "",
+    `- **未命中说明**：${unmatched_guidance}`,
+    ...(targetSlots.length > 0 ? [`- **本次待对位核心概念槽位**：${targetSlots.join("、")}`] : []),
+    "",
+    ...fallbackSig.map((st) => `- **通用参考 · ${st.term}**：${st.analogy_explanation}`),
+    "",
+    `> ${stage3_process_omitted_notice}`,
+    `> ${stage3_followup_prompt}`,
+  ].join("\n");
+
+  return {
+    matched: false,
+    requested_game: displayGameName,
+    game_name: displayGameName,
+    genre: "UNIVERSAL",
+    platform: "通用游戏机制",
+    matched_signature_terms: fallbackSig,
+    linked_mechanics: fallbackMechanics,
+    style_spec_card,
+    unmatched_guidance,
+    stage3_direct_output,
+    stage3_process_omitted_notice,
+    stage3_followup_prompt,
+  };
+}
+
+export function queryLifeMemeByTerm(
+  memeInput: string,
+  sourceText = "",
+  lifeMemesKb?: LifeMemesKnowledgeBase,
+): LifeMemeSpecificQueryResult {
+  const lkb = lifeMemesKb ?? loadLifeMemesKnowledgeBase();
+  const cleaned = memeInput
+    .replace(/^(?:用)?[【《「\[\(]?/u, "")
+    .replace(/[】》」\]\)]?(?:这个梗|热梗|的理解方式打开)?$/u, "")
+    .trim();
+  const lowered = cleaned.toLocaleLowerCase();
+  const loweredSource = sourceText.toLocaleLowerCase();
+  const targetSlots = extractTargetConceptSlots(sourceText);
+
+  let matchedEntries = lkb.entries.filter(
+    (e) =>
+      lowered.length > 0 &&
+      (e.term.toLocaleLowerCase().includes(lowered) ||
+        lowered.includes(e.term.toLocaleLowerCase()) ||
+        e.aliases.some(
+          (a) => a.toLocaleLowerCase().includes(lowered) || lowered.includes(a.toLocaleLowerCase())
+        ))
+  );
+
+  const matched = matchedEntries.length > 0;
+  if (!matched) {
+    const byConcept = lkb.entries.filter((e) =>
+      e.abstract_concept_mapping.some((k) => loweredSource.includes(k.toLocaleLowerCase()))
+    );
+    matchedEntries = byConcept.length > 0 ? byConcept.slice(0, 2) : lkb.entries.slice(0, 2);
+  }
+
+  const displayMeme = matched ? matchedEntries[0]!.term : cleaned || matchedEntries[0]!.term;
+  const unmatched_guidance = !matched
+    ? `知识库未精确收录热梗「${displayMeme}」（matched=false）。请宿主模型直接围绕「${displayMeme}」的真实社交语用含义对位目标概念槽位，下方词条仅作句式尺度参考。`
+    : undefined;
+  const style_spec_card: StyleSpecCard = {
+    mode: "life_meme",
+    matched_in_kb: matched,
+    requested_entity: cleaned || displayMeme,
+    resolved_entity: displayMeme,
+    target_concept_slots: targetSlots,
+    core_constraints: matchedEntries.slice(0, 2).map((e) => `${e.term}（语用内核：${e.pragmatic_meaning}）`),
+    anti_slop_guardrail: matchedEntries[0]?.narrative_boundary_tip ?? "只借热梗的因果反差一两句点透，严禁堆砌过时烂梗或脱离原意硬套。",
+    ...(unmatched_guidance ? { unmatched_guidance } : {}),
+    few_shot_sample_notice: "下方示例仅为语用参考标本，宿主模型必须针对本次输入概念动态撰写解释，严禁原样复读无关示例。",
+  };
+
+  const stage3_process_omitted_notice = "过程已省略";
+  const stage3_followup_prompt = buildContextAwareFollowupPrompt(sourceText);
+  const lines = [
+    `### 【网络热梗转换规约卡 · ${displayMeme}${matched ? "" : "（库外动态对位）"}】`,
+    "",
+    ...(unmatched_guidance ? [`- **未命中诚实提示**：${unmatched_guidance}`] : []),
+    ...(targetSlots.length > 0 ? [`- **本次待转译概念槽位**：${targetSlots.join("、")}`] : []),
+    ...matchedEntries.slice(0, 2).map((e) => {
+      const ex = e.conversion_examples[0];
+      return `- **参考标本 · ${e.term}**（${e.layman_explanation}）：${ex ? ex.colloquial_output : e.pragmatic_meaning}`;
+    }),
+    "",
+    `> ${stage3_process_omitted_notice}`,
+    `> ${stage3_followup_prompt}`,
+  ];
+
+  return {
+    matched,
+    requested_meme: cleaned || displayMeme,
+    meme_term: displayMeme,
+    matched_entries: matchedEntries.slice(0, 3),
+    style_spec_card,
+    ...(unmatched_guidance ? { unmatched_guidance } : {}),
+    stage3_direct_output: lines.join("\n"),
+    stage3_process_omitted_notice,
+    stage3_followup_prompt,
+  };
+}
+
+export function queryAuthorStyleByName(
+  authorInput: string,
+  sourceText = "",
+  authorsKb?: StoryAuthorsKnowledgeBase,
+): AuthorStyleQueryResult {
+  const akb = authorsKb ?? loadStoryAuthorsKnowledgeBase();
+  const cleaned = authorInput
+    .replace(/^(?:用|仿照|仿真)?[【《「\[\(]?/u, "")
+    .replace(/[】》」\]\)]?(?:的?(?:风格|笔法|写法|文风))?$/u, "")
+    .trim();
+  const lowered = cleaned.toLocaleLowerCase();
+  const loweredSource = sourceText.toLocaleLowerCase();
+  const targetSlots = extractTargetConceptSlots(sourceText);
+
+  const directMatch = akb.authors.find(
+    (a) =>
+      lowered.length > 0 &&
+      (a.author_name_zh.toLocaleLowerCase() === lowered ||
+        lowered.includes(a.author_name_zh.toLocaleLowerCase()) ||
+        a.author_name_en.toLocaleLowerCase().includes(lowered) ||
+        a.aliases.some(
+          (al) => al.toLocaleLowerCase() === lowered || lowered.includes(al.toLocaleLowerCase())
+        ))
+  );
+
+  const matched = Boolean(directMatch);
+  const referenceAuthor =
+    directMatch ??
+    akb.authors.find((a) =>
+      a.best_suited_concepts.some((c) => loweredSource.includes(c.toLocaleLowerCase()))
+    ) ??
+    akb.authors[1]!;
+
+  // Crucial v3.0 fix: Never silently pretend requested author X is Wang Xiaobo!
+  const effectiveAuthorZh = matched ? referenceAuthor.author_name_zh : (cleaned || referenceAuthor.author_name_zh);
+  const effectiveAuthorEn = matched ? referenceAuthor.author_name_en : (cleaned ? `Custom Author (${cleaned})` : referenceAuthor.author_name_en);
+  const unmatched_guidance = !matched && cleaned
+    ? `知识库尚未内置作家「${cleaned}」专属档案（matched=false，结构参考模板取自「${referenceAuthor.author_name_zh}」）。请宿主模型严格按照「${cleaned}」本人的真实代表作句法、意象与叙事视角来解释本次目标概念，切勿用参考作家文风冒充「${cleaned}」！`
+    : undefined;
+
+  const style_spec_card: StyleSpecCard = {
+    mode: "author_style",
+    matched_in_kb: matched,
+    requested_entity: cleaned || referenceAuthor.author_name_zh,
+    resolved_entity: effectiveAuthorZh,
+    target_concept_slots: targetSlots,
+    core_constraints: matched
+      ? referenceAuthor.signature_voice_traits
+      : [`提取「${effectiveAuthorZh}」标志性叙事视角与句式节奏`, "严守物理因果同构，拒绝贴标签伪类比"],
+    anti_slop_guardrail: referenceAuthor.anti_slop_guardrail,
+    ...(unmatched_guidance ? { unmatched_guidance } : {}),
+    few_shot_sample_notice: "下方文风标本仅供句法节奏对标！当输入源文本与标本概念不同时，宿主模型必须围绕 `target_concept_slots` 全新撰写正文，严禁把标本原文照搬给用户。",
+  };
+
+  const stage3_process_omitted_notice = "过程已省略";
+  const stage3_followup_prompt = buildContextAwareFollowupPrompt(sourceText);
+  const ex = referenceAuthor.conversion_examples[0];
+  const sampleMatchesTopic =
+    ex && targetSlots.some((slot) => slot.length >= 2 && ex.source_concept.includes(slot));
+
+  const stage3_direct_output = [
+    `### 【作家文风规约卡 · 仿真${effectiveAuthorZh}${matched ? "" : "（库外诚实回退）"}】`,
+    "",
+    ...(unmatched_guidance ? [`- **库外作家诚实提示**：${unmatched_guidance}`] : []),
+    ...(targetSlots.length > 0 ? [`- **本次目标概念槽位（必须动态覆盖）**：${targetSlots.join("、")}`] : []),
+    `- **核心文风指纹**：${matched ? referenceAuthor.signature_voice_traits.join("；") : `请调取「${effectiveAuthorZh}」真实文学母题、叙事腔调与代表性生活细节`}`,
+    `- **句法节奏要领**：${matched ? referenceAuthor.sentence_rhythm_and_diction : `保持「${effectiveAuthorZh}」原著长短句呼吸感，严守事实边界`}`,
+    `- **防跑偏红线**：${referenceAuthor.anti_slop_guardrail}`,
+    "",
+    ex
+      ? `> **【文风节奏参考标本${sampleMatchesTopic ? "" : `（原标本主题：${ex.source_concept}；仅供笔法参考，请针对本次概念重写）`}】**\n> ${ex.author_style_output}`
+      : referenceAuthor.sentence_rhythm_and_diction,
+    "",
+    `> ${stage3_process_omitted_notice}`,
+    `> ${stage3_followup_prompt}`,
+  ].join("\n");
+
+  return {
+    matched,
+    requested_author: cleaned || referenceAuthor.author_name_zh,
+    ...(matched ? {} : { fallback_reference_author: referenceAuthor.author_name_zh }),
+    author_name_zh: effectiveAuthorZh,
+    author_name_en: effectiveAuthorEn,
+    tradition: referenceAuthor.tradition,
+    linked_skill_style: referenceAuthor.linked_skill_style,
+    signature_voice_traits: referenceAuthor.signature_voice_traits,
+    sentence_rhythm_and_diction: referenceAuthor.sentence_rhythm_and_diction,
+    anti_slop_guardrail: referenceAuthor.anti_slop_guardrail,
+    conversion_examples: referenceAuthor.conversion_examples,
+    style_spec_card,
+    ...(unmatched_guidance ? { unmatched_guidance } : {}),
+    stage3_direct_output,
+    stage3_process_omitted_notice,
+    stage3_followup_prompt,
+  };
 }
 
 const GAMING_HABIT_CUES = [
@@ -172,6 +820,9 @@ export function detectUserHabit(text: string, preferred: UserHabitOption = "auto
 const CLASSICAL_CHAR_MARKERS = /[之乎者也矣焉哉夫盖以于而则乃其所弗莫未皆悉咸孰殆诚微曰]/gu;
 const CLASSICAL_PHRASE_MARKERS = /(?:故曰|是以|然则|君子曰|臣闻|是故|不亦|无乃|何也|非.*也|所以.*也|为.*所|何.*之有|无以|由是观之|由此观之|呜呼|嗟夫)/u;
 
+const MODERN_COMPOUND_MASK_RE =
+  /(?:协调|参与|生产|消费|观察|调用|订阅|发送|接收|领导|跟随|候选|开发|使用|攻击|访问|持有|竞争|工作|执行|调度|仲裁|阅读|创作|管理|维护|设计|测试|监听|请求|响应|代理|投资|消费)者|(?:由|对|关|基|处|属|等|大|小|高|低|在|源|始|终|至|利|便|善)于|而且|并且|或者|以及|已经|之所以|换言之|总而言之|未捕获|未确认|未定义|未授权|未完成|分布式|高并发|数据库|服务器|客户端|宕机|阻塞|协议|线程|进程|节点|矩阵|梯度|算法/gu;
+
 export function computeClassicalDensity(text: string, kb?: ClassicalChineseKnowledgeBase): number {
   const clean = text.replace(/\s+/gu, "");
   if (clean.length < 6) return 0;
@@ -181,9 +832,10 @@ export function computeClassicalDensity(text: string, kb?: ClassicalChineseKnowl
   );
   if (canonicalHit) return 0.85;
 
-  const charMatches = clean.match(CLASSICAL_CHAR_MARKERS) ?? [];
+  const masked = clean.replace(MODERN_COMPOUND_MASK_RE, "现");
+  const charMatches = masked.match(CLASSICAL_CHAR_MARKERS) ?? [];
   const charRatio = charMatches.length / clean.length;
-  const hasClassicalPhrase = CLASSICAL_PHRASE_MARKERS.test(clean);
+  const hasClassicalPhrase = CLASSICAL_PHRASE_MARKERS.test(masked);
   const modernFunctionRatio = ((clean.match(/[的了着吧呢吗]/gu) ?? []).length) / clean.length;
 
   let score = charRatio * 2.8 + (hasClassicalPhrase ? 0.35 : 0) - modernFunctionRatio * 1.8;
@@ -238,12 +890,57 @@ function extractCandidateTermsFromClause(clause: string): string[] {
   return merged;
 }
 
+export function resolveClassicalPolysemy(
+  text: string,
+  kb?: ClassicalChineseKnowledgeBase,
+): PolysemyResolutionHit[] {
+  const loadedKb = kb ?? loadClassicalKnowledgeBase();
+  const hits: PolysemyResolutionHit[] = [];
+  for (const item of loadedKb.polysemy_disambiguation ?? []) {
+    for (const sense of item.senses) {
+      try {
+        const re = new RegExp(sense.context_regex, "u");
+        const m = re.exec(text);
+        if (m) {
+          hits.push({
+            char: item.char,
+            matched_phrase: m[0],
+            sense_label: sense.sense_label,
+            note: sense.note,
+          });
+        }
+      } catch {
+        // ignore invalid regex
+      }
+    }
+  }
+  return hits;
+}
+
 function translateClassicalClauseByRules(
   clause: string,
   kb: ClassicalChineseKnowledgeBase,
 ): string {
   let out = clause.trim();
   if (!out) return out;
+
+  // 0. Context-sensitive polysemy disambiguation FIRST (prevents blind single-meaning overwrite)
+  for (const item of kb.polysemy_disambiguation ?? []) {
+    for (const sense of item.senses) {
+      try {
+        const re = new RegExp(sense.context_regex, "u");
+        if (re.test(out)) {
+          for (const [targetPhrase, vernacularText] of sense.vernacular_replacement) {
+            if (out.includes(targetPhrase)) {
+              out = out.split(targetPhrase).join(vernacularText);
+            }
+          }
+        }
+      } catch {
+        // ignore invalid regex
+      }
+    }
+  }
 
   // 1. Apply multi-char lexical entries (longest first)
   const sortedLex = [...kb.lexical_entries].sort((a, b) => b.word.length - a.word.length);
@@ -267,6 +964,9 @@ function translateClassicalClauseByRules(
 
   // 3. Apply common single-char classical function/content fallbacks
   const singleCharReplacements: Array<[RegExp, string]> = [
+    [/乃悟/gu, "这才明白"],
+    [/前狼/gu, "前面那只狼"],
+    [/以是/gu, "因此"],
     [/弗敢/gu, "不敢"],
     [/弗/gu, "不"],
     [/莫不/gu, "没有谁不"],
@@ -330,6 +1030,8 @@ export function translateClassicalChinese(
     return true;
   });
 
+  const polysemy_disambiguations = resolveClassicalPolysemy(cleanText, loadedKb);
+
   const rawSentences = cleanText
     .split(/(?<=[。！？；!?;])\s*|\r?\n/u)
     .map((s) => s.trim())
@@ -363,6 +1065,7 @@ export function translateClassicalChinese(
       : (thesisSentences[thesisSentences.length - 1]?.vernacular ?? fallbackVernacular),
     matched_particles,
     matched_lexical_glosses,
+    ...(polysemy_disambiguations.length > 0 ? { polysemy_disambiguations } : {}),
     sentence_by_sentence,
   };
 }
@@ -447,6 +1150,8 @@ export function buildHabitAnalogyMappings(
   habit: UserHabit,
   kb: ClassicalChineseKnowledgeBase,
   classicalTranslation?: ClassicalTranslationResult,
+  gamingKb?: GamingKnowledgeBase,
+  lifeMemesKb?: LifeMemesKnowledgeBase,
 ): HabitAnalogyMapping[] {
   const results: HabitAnalogyMapping[] = [];
   const usedDescriptions = new Set<string>();
@@ -468,7 +1173,7 @@ export function buildHabitAnalogyMappings(
     }
   }
 
-  // 2. Match against habit_analogy_lexicon
+  // 2. Match against habit_analogy_lexicon from classical kb
   const lexicon = kb.habit_analogy_lexicon[habit] ?? kb.habit_analogy_lexicon.daily;
   const loweredFull = fullText.toLocaleLowerCase();
   for (const entry of lexicon) {
@@ -486,7 +1191,49 @@ export function buildHabitAnalogyMappings(
     }
   }
 
-  // 3. Fallback concise habit mapping if no preset entry matched
+  // 3. Match against dedicated Gaming KB
+  if (habit === "gaming") {
+    const gkb = gamingKb ?? loadGamingKnowledgeBase();
+    for (const entry of gkb.entries) {
+      const allSearchTerms = [...entry.abstract_concept_mapping, entry.term_zh, entry.term_en, ...entry.aliases];
+      const matchedTerm = allSearchTerms.find(
+        (t) => loweredFull.includes(t.toLocaleLowerCase()) || keywords.some((kw) => kw.toLocaleLowerCase().includes(t.toLocaleLowerCase()))
+      );
+      const ex = entry.conversion_examples[0];
+      if (matchedTerm && ex && !usedDescriptions.has(ex.game_analogy_output)) {
+        usedDescriptions.add(ex.game_analogy_output);
+        results.push({
+          concept: matchedTerm,
+          habit: "gaming",
+          habit_label: HABIT_LABELS.gaming,
+          daily_lingo_mapping: ex.game_analogy_output,
+        });
+      }
+    }
+  }
+
+  // 4. Match against dedicated Life Memes KB
+  if (habit === "daily" || habit === "workplace") {
+    const lkb = lifeMemesKb ?? loadLifeMemesKnowledgeBase();
+    for (const entry of lkb.entries) {
+      const allSearchTerms = [...entry.abstract_concept_mapping, entry.term, ...entry.aliases];
+      const matchedTerm = allSearchTerms.find(
+        (t) => loweredFull.includes(t.toLocaleLowerCase()) || keywords.some((kw) => kw.toLocaleLowerCase().includes(t.toLocaleLowerCase()))
+      );
+      const ex = entry.conversion_examples[0];
+      if (matchedTerm && ex && !usedDescriptions.has(ex.colloquial_output)) {
+        usedDescriptions.add(ex.colloquial_output);
+        results.push({
+          concept: matchedTerm,
+          habit,
+          habit_label: HABIT_LABELS[habit],
+          daily_lingo_mapping: ex.colloquial_output,
+        });
+      }
+    }
+  }
+
+  // 5. Fallback concise habit mapping if no preset entry matched
   if (results.length === 0 && keywords.length > 0) {
     const topKw = keywords[0]!;
     const secondKw = keywords[1] ?? "执行动作";
@@ -511,6 +1258,8 @@ export function screenThesisKeywords(
   options: ScreenKeywordsOptions = {},
 ): KeywordScreeningReport {
   const kb = loadClassicalKnowledgeBase(options.kbPath);
+  const gamingKb = loadGamingKnowledgeBase(options.gamingKbPath);
+  const lifeMemesKb = loadLifeMemesKnowledgeBase(options.lifeMemesKbPath);
   const topK = options.topK ?? 5;
   const detected_user_habit = detectUserHabit(text, options.habit ?? "auto");
   const { mode: discourse_mode, redundancyRatio } = detectDiscourseMode(text, kb);
@@ -680,11 +1429,23 @@ export function screenThesisKeywords(
     detected_user_habit,
     kb,
     classical_translation,
+    gamingKb,
+    lifeMemesKb,
   );
+
+  const selected_game_query = options.gameTitle
+    ? queryGameTermsByTitle(options.gameTitle, text, gamingKb)
+    : undefined;
+  const selected_meme_query = options.memeTerm
+    ? queryLifeMemeByTerm(options.memeTerm, text, lifeMemesKb)
+    : undefined;
+  const selected_author_query = options.authorName
+    ? queryAuthorStyleByName(options.authorName, text, loadStoryAuthorsKnowledgeBase(options.storyAuthorsKbPath))
+    : undefined;
 
   return {
     discourse_mode,
-    detected_user_habit,
+    detected_user_habit: selected_game_query ? "gaming" : detected_user_habit,
     narrative_boundary,
     redundancy_ratio: redundancyRatio,
     compression_ratio,
@@ -694,6 +1455,9 @@ export function screenThesisKeywords(
     pithy_vernacular_summary,
     habit_analogy_mappings,
     ...(classical_translation ? { classical_translation } : {}),
+    ...(selected_game_query ? { selected_game_query } : {}),
+    ...(selected_meme_query ? { selected_meme_query } : {}),
+    ...(selected_author_query ? { selected_author_query } : {}),
   };
 }
 
@@ -755,6 +1519,16 @@ export function renderKeywordScreeningMarkdown(report: KeywordScreeningReport): 
     lines.push(`- **【${mapping.habit_label} · ${mapping.concept}】**：${mapping.daily_lingo_mapping}`);
   }
 
+  if (report.selected_game_query) {
+    lines.push("", report.selected_game_query.stage3_direct_output);
+  } else if (report.selected_meme_query) {
+    lines.push("", report.selected_meme_query.stage3_direct_output);
+  } else if (report.selected_author_query) {
+    lines.push("", report.selected_author_query.stage3_direct_output);
+  } else {
+    lines.push("", "> 过程已省略", "> 你可以试试说：用【王者荣耀】的理解方式打开");
+  }
+
   lines.push("", "## 叙述边界铁律");
   for (const rule of report.narrative_boundary.boundary_rules) {
     lines.push(`- ${rule}`);
@@ -764,11 +1538,14 @@ export function renderKeywordScreeningMarkdown(report: KeywordScreeningReport): 
 }
 
 function help(): void {
-  process.stdout.write(`切中观点的关键词筛选与文言文/重复观点极简白话工具（Bun/TypeScript）\n\n用法：\n  bun run screen-keywords -- "君子曰：学不可以已……君子生非异也，善假于物也。" --habit gaming\n  bun run screen-keywords -- article.md --markdown\n  echo "待分析文本" | bun run screen-keywords -- - --habit gaming\n\n选项：\n  --habit <auto|gaming|daily|workplace>  指定用户日常习惯类比域（默认 auto，自动识别游戏/职场/日常）\n  --top <N>                              筛选切中观点的核心关键词数量（默认 5）\n  --kb <路径>                            指定自定义文言文翻译 JSON 知识库路径\n  --markdown                             输出 Markdown 格式的极简白话与关键词筛选报告\n  --json                                 输出 JSON 结构（默认）\n  --deterministic                        稳定键序输出 JSON\n`);
+  process.stdout.write(`切中观点的关键词筛选与文言文/重复观点极简白话工具（Bun/TypeScript）\n\n用法：\n  bun run screen-keywords -- "君子曰：学不可以已……君子生非异也，善假于物也。" --habit gaming\n  bun run screen-keywords -- "令牌桶限流与服务熔断" --game 王者荣耀 --markdown\n  bun run screen-keywords -- "异常冒泡与责任链" --meme 甩锅 --markdown\n  bun run screen-keywords -- "死锁的互斥与循环等待" --author 鲁迅 --markdown\n  bun run screen-keywords -- article.md --markdown\n  echo "待分析文本" | bun run screen-keywords -- - --habit gaming\n\n选项：\n  --habit <auto|gaming|daily|workplace>  指定用户日常习惯类比域（默认 auto，自动识别游戏/职场/日常）\n  --game <游戏名>                        指定具体游戏名（如 王者荣耀、英雄联盟、原神、黑神话：悟空）查询专属术语并转换\n  --meme <网络热梗>                      指定具体网络热梗（如 甩锅、草台班子、硬控、画大饼、破防）查询词库并转换\n  --author <知名作者名>                  指定仿真世界知名作家（如 鲁迅、王小波、刘慈欣、海明威、柯南·道尔、博尔赫斯）查询写法并转换\n  --top <N>                              筛选切中观点的核心关键词数量（默认 5）\n  --kb <路径>                            指定自定义文言文翻译 JSON 知识库路径\n  --markdown                             输出 Markdown 格式的极简白话与关键词筛选报告\n  --json                                 输出 JSON 结构（默认）\n  --deterministic                        稳定键序输出 JSON\n`);
 }
 
 async function main(argv: string[]): Promise<void> {
   let habit: UserHabitOption = "auto";
+  let gameTitle: string | undefined;
+  let memeTerm: string | undefined;
+  let authorName: string | undefined;
   let topK = 5;
   let kbPath: string | undefined;
   let markdownMode = false;
@@ -787,6 +1564,25 @@ async function main(argv: string[]): Promise<void> {
         usageError("--habit 只能是 auto、gaming、daily 或 workplace");
       }
       habit = val;
+      i += 1;
+      continue;
+    }
+    if (arg === "--game") {
+      gameTitle = argv[i + 1];
+      if (!gameTitle) usageError("--game 需要具体游戏名称（例如 王者荣耀）");
+      habit = "gaming";
+      i += 1;
+      continue;
+    }
+    if (arg === "--meme") {
+      memeTerm = argv[i + 1];
+      if (!memeTerm) usageError("--meme 需要具体网络热梗名称（例如 草台班子、硬控、甩锅）");
+      i += 1;
+      continue;
+    }
+    if (arg === "--author") {
+      authorName = argv[i + 1];
+      if (!authorName) usageError("--author 需要世界知名作家名称（例如 鲁迅、王小波、刘慈欣、海明威）");
       i += 1;
       continue;
     }
@@ -839,7 +1635,7 @@ async function main(argv: string[]): Promise<void> {
     usageError("输入文本不能为空");
   }
 
-  const report = screenThesisKeywords(rawText, { habit, topK, kbPath });
+  const report = screenThesisKeywords(rawText, { habit, gameTitle, memeTerm, authorName, topK, kbPath });
   if (markdownMode) {
     process.stdout.write(renderKeywordScreeningMarkdown(report));
   } else if (deterministic) {

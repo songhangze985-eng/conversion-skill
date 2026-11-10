@@ -21,6 +21,16 @@ export interface PageText {
   page: number;
   text: string;
   characters: number;
+  layout_mode?: "single-column" | "two-column";
+  math_integrity_warnings?: string[];
+}
+
+export interface PdfPositionedTextItem {
+  str: string;
+  x: number;
+  y: number;
+  width?: number;
+  hasEOL?: boolean;
 }
 
 export interface NavigationEntry {
@@ -208,13 +218,144 @@ async function createWorkspace(workspace: string): Promise<string> {
   return workspace;
 }
 
-function normalizePdfText(raw: string): string {
-  return raw
+export function normalizePdfAcademicText(raw: string): { text: string; mathWarnings: string[] } {
+  const mathWarnings: string[] = [];
+  if (/\ufffd/u.test(raw)) {
+    mathWarnings.push("检测到 Unicode 替换符 (U+FFFD)，PDF 内嵌公式或特殊符号字库可能存在乱码缺失");
+  }
+  if (/[\uE000-\uF8FF]/u.test(raw)) {
+    mathWarnings.push("检测到私用区字形 (PUA Glyphs)，LaTeX 数学符号（如积分/求和/括号扩展符）可能未映射为标准字符");
+  }
+  if (/[\x01-\x08\x0B\x0C\x0E-\x1F]/u.test(raw)) {
+    mathWarnings.push("检测到底层控制字符残留，公式上下标或算子字形可能发生断层");
+  }
+
+  const text = raw
     .replace(/\u0000/g, "")
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, " ")
+    .replace(/[\uE000-\uF8FF]/g, " ")
+    .replace(/ﬀ/gu, "ff")
+    .replace(/ﬁ/gu, "fi")
+    .replace(/ﬂ/gu, "fl")
+    .replace(/ﬃ/gu, "ffi")
+    .replace(/ﬄ/gu, "ffl")
+    .replace(/ﬅ/gu, "ft")
+    .replace(/ﬆ/gu, "st")
+    .replace(/([A-Za-z]{2,})-\r?\n([a-z]{2,})/gu, "$1$2")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+
+  return { text, mathWarnings };
+}
+
+function mergeLineItems(items: PdfPositionedTextItem[]): string[] {
+  if (items.length === 0) return [];
+  const sorted = [...items].sort((a, b) => {
+    if (Math.abs(b.y - a.y) > 2.8) return b.y - a.y;
+    return a.x - b.x;
+  });
+  const lines: string[] = [];
+  let currentItems: PdfPositionedTextItem[] = [];
+  let currentY: number | null = null;
+
+  const flush = (): void => {
+    if (currentItems.length === 0) return;
+    currentItems.sort((a, b) => a.x - b.x);
+    let line = "";
+    let prevEndX: number | null = null;
+    for (const it of currentItems) {
+      if (!it.str) continue;
+      const gap = prevEndX !== null ? it.x - prevEndX : 0;
+      const needsSpace =
+        line.length > 0 &&
+        !line.endsWith(" ") &&
+        !it.str.startsWith(" ") &&
+        (gap > 1.5 || /[A-Za-z0-9]$/u.test(line) && /^[A-Za-z0-9]/u.test(it.str));
+      line += (needsSpace ? " " : "") + it.str;
+      const estWidth = it.width !== undefined && it.width > 0 ? it.width : it.str.length * 4.8;
+      prevEndX = it.x + estWidth;
+    }
+    if (line.trim()) lines.push(line.trim());
+    currentItems = [];
+    currentY = null;
+  };
+
+  for (const item of sorted) {
+    if (!item.str && !item.hasEOL) continue;
+    if (currentY !== null && Math.abs(item.y - currentY) > 2.8) {
+      flush();
+    }
+    if (item.str) {
+      currentItems.push(item);
+      if (currentY === null) currentY = item.y;
+    }
+    if (item.hasEOL && currentItems.length > 0 && currentItems.length > 8) {
+      // Preserve coordinate grouping over premature mid-column EOL flags
+    }
+  }
+  flush();
+  return lines;
+}
+
+export function sortPdfTextItemsTwoColumn(
+  items: PdfPositionedTextItem[],
+  pageWidth = 612,
+): { lines: string[]; layoutMode: "single-column" | "two-column" } {
+  const nonEmpty = items.filter((it) => it.str.trim().length > 0);
+  if (nonEmpty.length === 0) return { lines: [], layoutMode: "single-column" };
+
+  const midX = pageWidth / 2;
+  const classify = (it: PdfPositionedTextItem): "left" | "right" | "full" => {
+    const estW = it.width !== undefined && it.width > 0 ? it.width : it.str.length * 4.8;
+    const endX = it.x + estW;
+    if (it.x < midX - 14 && endX <= midX + 16) return "left";
+    if (it.x >= midX - 12) return "right";
+    return "full";
+  };
+
+  // Sort top-to-bottom first to partition around full-width barriers (title, full-width abstract, banner captions)
+  const byYDesc = [...nonEmpty].sort((a, b) => (Math.abs(b.y - a.y) > 2.8 ? b.y - a.y : a.x - b.x));
+  interface Segment {
+    kind: "full" | "columns";
+    items: PdfPositionedTextItem[];
+  }
+  const segments: Segment[] = [];
+  for (const it of byYDesc) {
+    const role = classify(it);
+    const segKind = role === "full" ? "full" : "columns";
+    const last = segments[segments.length - 1];
+    if (!last || last.kind !== segKind) {
+      segments.push({ kind: segKind, items: [it] });
+    } else {
+      last.items.push(it);
+    }
+  }
+
+  let detectedTwoColumn = false;
+  const outputLines: string[] = [];
+  for (const seg of segments) {
+    if (seg.kind === "full") {
+      outputLines.push(...mergeLineItems(seg.items));
+      continue;
+    }
+    const leftItems = seg.items.filter((it) => classify(it) === "left");
+    const rightItems = seg.items.filter((it) => classify(it) === "right");
+    const leftLines = mergeLineItems(leftItems);
+    const rightLines = mergeLineItems(rightItems);
+    if (leftLines.length >= 2 && rightLines.length >= 2) {
+      detectedTwoColumn = true;
+      outputLines.push(...leftLines, ...rightLines);
+    } else {
+      outputLines.push(...mergeLineItems(seg.items));
+    }
+  }
+
+  return {
+    lines: outputLines,
+    layoutMode: detectedTwoColumn ? "two-column" : "single-column",
+  };
 }
 
 async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageCount: number }> {
@@ -225,32 +366,46 @@ async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageC
   const pages: PageText[] = [];
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
     const page = await document.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
-    const lines: string[] = [];
-    let currentLine = "";
-    let lastY: number | null = null;
+    const positionedItems: PdfPositionedTextItem[] = [];
+    let hasValidCoords = false;
     for (const item of content.items) {
       if (!("str" in item)) continue;
-      const str = item.str;
       const transform = "transform" in item && Array.isArray(item.transform) ? item.transform : undefined;
-      const y = typeof transform?.[5] === "number" ? transform[5] : null;
-      if (lastY !== null && y !== null && Math.abs(y - lastY) > 2.5) {
-        if (currentLine.trim()) lines.push(currentLine.trim());
-        currentLine = str;
-      } else {
-        currentLine += (currentLine && !currentLine.endsWith(" ") && str && !str.startsWith(" ") ? " " : "") + str;
+      const x = typeof transform?.[4] === "number" ? transform[4] : 0;
+      const y = typeof transform?.[5] === "number" ? transform[5] : 0;
+      if (typeof transform?.[4] === "number" && typeof transform?.[5] === "number") {
+        hasValidCoords = true;
       }
-      if (item.hasEOL) {
-        if (currentLine.trim()) lines.push(currentLine.trim());
-        currentLine = "";
-        lastY = null;
-      } else if (y !== null) {
-        lastY = y;
-      }
+      const width = "width" in item && typeof item.width === "number" ? item.width : undefined;
+      positionedItems.push({
+        str: item.str,
+        x,
+        y,
+        width,
+        hasEOL: Boolean(item.hasEOL),
+      });
     }
-    if (currentLine.trim()) lines.push(currentLine.trim());
-    const text = normalizePdfText(lines.join("\n"));
-    pages.push({ page: pageNumber, text, characters: text.length });
+
+    let rawJoined = "";
+    let layoutMode: "single-column" | "two-column" = "single-column";
+    if (hasValidCoords) {
+      const sorted = sortPdfTextItemsTwoColumn(positionedItems, viewport?.width || 612);
+      rawJoined = sorted.lines.join("\n");
+      layoutMode = sorted.layoutMode;
+    } else {
+      rawJoined = positionedItems.map((it) => it.str).join("\n");
+    }
+
+    const { text, mathWarnings } = normalizePdfAcademicText(rawJoined);
+    pages.push({
+      page: pageNumber,
+      text,
+      characters: text.length,
+      layout_mode: layoutMode,
+      ...(mathWarnings.length > 0 ? { math_integrity_warnings: mathWarnings } : {}),
+    });
   }
   const closers = [document as { destroy?: () => Promise<void>; cleanup?: () => void }, loadingTask as { destroy?: () => Promise<void> }];
   if (typeof closers[0].destroy === "function") await closers[0].destroy();
@@ -387,12 +542,43 @@ export function extractPaperArtifacts(pages: PageText[]): PaperArtifact[] {
   return artifacts.slice(0, 20);
 }
 
+function fallbackMethodEvidence(pages: PageText[]): NavigationEntry | undefined {
+  const excludedHeadingRe =
+    /\b(?:abstract|introduction|background|preliminar(?:y|ies)|related\s+work|prior\s+work|experiments?|results?|evaluation|discussion|conclusions?|acknowledge?ments?|references|bibliography|appendix|supplementary)\b|(?:摘\s*要|引\s*言|绪\s*论|相关工作|研究背景|实验|结果|评估|讨论|结论|致谢|参考文献|附录)/iu;
+  const numberedHeadingRe = /^(?:[2-6](?:\.\d+)?|[IIVX]{1,4}|[二三四五六])[.、:\s]+([A-Z\u4e00-\u9fff][^\n]{2,64})$/u;
+  const techSignalRe =
+    /\b(?:algorithm|architecture|mechanism|attention|kernel|loss|objective|gradient|matrix|tensor|protocol|consensus|complexity|theorem|proposition|formulation|pipeline|module|layer)\b|(?:算法|架构|机制|复杂度|公式|矩阵|协议|模块|推导|目标函数)|=\s*[A-Za-z0-9\\(]/iu;
+
+  for (const page of pages) {
+    const lines = page.text.split(/\r?\n/u);
+    for (let idx = 0; idx < lines.length; idx += 1) {
+      const trimmed = lines[idx]?.trim() ?? "";
+      if (trimmed.length > 72) continue;
+      const m = trimmed.match(numberedHeadingRe);
+      if (!m) continue;
+      if (excludedHeadingRe.test(trimmed)) continue;
+      const headingPos = page.text.indexOf(trimmed);
+      const windowSnippet = headingPos >= 0 ? page.text.slice(headingPos, headingPos + SECTION_MAX_CHARS.method) : lines.slice(idx, idx + 18).join("\n");
+      if (windowSnippet.length >= 80 && techSignalRe.test(windowSnippet)) {
+        return {
+          id: "",
+          kind: "method",
+          page: page.page,
+          section: "method",
+          evidence: truncateEvidence(windowSnippet, SECTION_MAX_CHARS.method),
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
 export function buildNavigation(pages: PageText[]): NavigationEntry[] {
   const entries = [
     titleEvidence(pages),
     sectionEvidence("abstract", pages) ?? untitledAbstract(pages),
     sectionEvidence("results", pages),
-    sectionEvidence("method", pages),
+    sectionEvidence("method", pages) ?? fallbackMethodEvidence(pages),
     sectionEvidence("conclusion", pages),
   ].filter((entry): entry is NavigationEntry => entry !== undefined);
   return entries.map((entry, index) => ({ ...entry, id: `N${String(index + 1).padStart(2, "0")}` }));
