@@ -246,6 +246,13 @@ describe("check-output mechanical gates", () => {
     expect(m.negative_parallelism_matches.length).toBeGreaterThanOrEqual(2);
     expect(m.hollow_epigrams.length).toBeGreaterThanOrEqual(1);
 
+    const claudeStyleSample = "装一只鱼确实就四步。难的是评论区那句「模板一夜能长出八百条一样的鱼」——壳能装，语气装不了。我的口音是这十来天一条条评论里磨出来的，不是点开关点出来的。";
+    const mClaude = evaluateMicroSentenceCracker(claudeStyleSample);
+    expect(mClaude.is_ai_produced).toBe(true);
+    expect(mClaude.label).toBe("ai生产");
+    expect(mClaude.negative_parallelism_matches).toContain("是这十来天一条条评论里磨出来的，不是点开关点出来的");
+    expect(mClaude.hollow_epigrams).toContain("——壳能装，语气装不了");
+
     const euGrammar = "集群里的节点们可以被用来进行状态同步。系统读取着在每次迭代的反向传播的过程中被优化器更新的权重参数。";
     const g = evaluateGrammarInspection(euGrammar);
     expect(g.has_issues).toBe(true);

@@ -1,0 +1,834 @@
+{
+  "schema_version": "1.0",
+  "name": "conversion-skill-gaming-kb",
+  "description": "游戏专业名词与核心机制设定知识库：涵盖主流游戏品类核心机制、中英术语映射、底层机制释义、现实生活/复杂技术概念类比与典型转换例句。",
+  "metadata": {
+    "author": "conversion-skill-team",
+    "last_updated": "2026-11-07",
+    "total_entries": 25
+  },
+  "genres": [
+    "MMO",
+    "MOBA",
+    "ARPG_SOULS",
+    "GACHA_RPG",
+    "FTG",
+    "ROGUELIKE",
+    "STRATEGY_RTS",
+    "FPS_BR",
+    "UNIVERSAL"
+  ],
+  "mechanic_categories": [
+    "resource_management",
+    "combat_action_flow",
+    "threat_and_targeting",
+    "crowd_control_defense",
+    "progression_economy",
+    "frame_and_timing",
+    "spatial_and_vision",
+    "system_and_meta"
+  ],
+  "popular_games": [
+    {
+      "game_id": "GAME-HOK-001",
+      "game_name": "王者荣耀",
+      "aliases": ["王者", "农药", "农", "Honor of Kings", "王者荣耀这款手游"],
+      "genre": "MOBA",
+      "platform": "手游 (Mobile MOBA)",
+      "linked_mechanic_ids": ["GM-CD-001", "GM-MANA-002", "GM-ARMOR-005", "GM-IFRAME-007", "GM-CC-010", "GM-SNOWBALL-012", "GM-FOG-014", "GM-SHIELD-020"],
+      "signature_terms": [
+        {
+          "term": "技能CD与多段充能（诸葛亮一技能/百里守约二技能）",
+          "mechanic_id": "GM-CD-001",
+          "concept_keywords": ["限流", "节流", "令牌桶", "突发流量", "恢复周期", "rate limit"],
+          "analogy_explanation": "就像《王者荣耀》里百里守约二技能最多存 3 颗子弹：团战前攒满 3 颗能一口气三连狙（应对突发流量），但打空后只能等读秒一颗颗充能恢复，狂戳屏幕也开不出第 4 枪。"
+        },
+        {
+          "term": "名刀·司命（致命伤锁血保底与短暂暗幕无敌）",
+          "mechanic_id": "GM-IFRAME-007",
+          "concept_keywords": ["服务熔断", "降级兜底", "防雪崩", "快速失败", "circuit breaker"],
+          "analogy_explanation": "就像《王者荣耀》里脆皮刺客出了一件「名刀·司命」：受到对面一套秒杀爆发时强制锁住最后 1 点血不死，并在接下来短暂无敌期内免疫一切后续伤害赶紧撤退回城，防止当场暴毙团灭。"
+        },
+        {
+          "term": "辉月金身（主动冻结无敌帧）",
+          "mechanic_id": "GM-IFRAME-007",
+          "concept_keywords": ["挂起隔离", "安全快照", "临界区保护", "免疫干扰"],
+          "analogy_explanation": "就像《王者荣耀》法师被集火瞬间按下「辉月」变成小金人：原地定住 1.5 秒虽不能动，但外界砸过来的所有大招全判无效，等敌方火力泻空后再安全接管操作。"
+        },
+        {
+          "term": "霸体免控（廉颇被动/韩信大招）",
+          "mechanic_id": "GM-ARMOR-005",
+          "concept_keywords": ["不可屏蔽中断", "原子操作", "非抢占执行", "临界区锁"],
+          "analogy_explanation": "就像《王者荣耀》里廉颇放技能时头顶亮起「霸体」二字：不管对面扔多少击飞和眩晕控制，动作绝对不被打断，硬顶着干扰把整套关键指令执行到底。"
+        },
+        {
+          "term": "净化与庄周大招（一键解控清除异常状态）",
+          "mechanic_id": "GM-CC-010",
+          "concept_keywords": ["死锁解除", "状态重置", "故障恢复", "异常清理"],
+          "analogy_explanation": "就像《王者荣耀》被连环控死时秒按召唤师技能「净化」或庄周开大：瞬间清空身上所有减速、眩晕和沉默负面状态，让卡死的角色立刻恢复响应。"
+        },
+        {
+          "term": "蓝条耗尽与蓝Buff回蓝",
+          "mechanic_id": "GM-MANA-002",
+          "concept_keywords": ["内存配额", "算力预算", "OOM", "资源池耗尽"],
+          "analogy_explanation": "就像《王者荣耀》里貂蝉或露娜没拿蓝 Buff 进团：哪怕手速再快、连招再秀，一旦头顶蓝条空了，所有技能全部变灰哑火，只能原地平 A。"
+        },
+        {
+          "term": "红蓝Buff与风暴龙王属性加成",
+          "mechanic_id": "GM-BUFF-011",
+          "concept_keywords": ["缓存加速", "装饰器增强", "中间件赋能", "外挂工具", "善假于物"],
+          "analogy_explanation": "就像《王者荣耀》里打野拿齐红蓝双 Buff 再抢下风暴龙王：英雄基础面板没变，但挂上减 CD、回蓝和感电护盾词条后，战力直接翻倍碾压全场。"
+        },
+        {
+          "term": "经济差滚雪球与六神装碾压",
+          "mechanic_id": "GM-SNOWBALL-012",
+          "concept_keywords": ["正反馈循环", "马太效应", "复利累积", "优势放大"],
+          "analogy_explanation": "就像《王者荣耀》开局拿下一血后反野控龙：每波小优势都变成装备差，等你提前做出破军六神装时，对面还在合小件，正面碰撞直接形成降维打击。"
+        }
+      ],
+      "open_with_game_template": "用【王者荣耀】的理解方式打开：把底层机制直接对位到王者峡谷里的「技能CD充能、名刀锁血熔断、辉月金身无敌帧、廉颇霸体免控与蓝条配额」，一眼看穿核心逻辑。"
+    },
+    {
+      "game_id": "GAME-LOL-002",
+      "game_name": "英雄联盟",
+      "aliases": ["LOL", "联盟", "撸啊撸", "League of Legends"],
+      "genre": "MOBA",
+      "platform": "端游 (PC MOBA)",
+      "linked_mechanic_ids": ["GM-CD-001", "GM-IFRAME-007", "GM-CC-010", "GM-FOG-014", "GM-SNOWBALL-012"],
+      "signature_terms": [
+        {
+          "term": "中娅沙漏（金身凝滞无敌）",
+          "mechanic_id": "GM-IFRAME-007",
+          "concept_keywords": ["服务熔断", "隔离保护", "临界区挂起"],
+          "analogy_explanation": "就像《英雄联盟》里脆皮C位按下「中娅沙漏」叮的一声变金身：2.5秒内主动暂停自身输出，但彻底免疫对面劫的大招和所有集火伤害。"
+        },
+        {
+          "term": "真眼与战争迷雾插眼排眼",
+          "mechanic_id": "GM-FOG-014",
+          "concept_keywords": ["可观测性", "链路追踪", "盲区监控", "心跳探针"],
+          "analogy_explanation": "就像《英雄联盟》往大龙坑和河道草丛插下「控制守卫（真眼）」：把原本漆黑一片的战争迷雾瞬间照亮，敌方打野任何偷袭动作都无所遁形。"
+        },
+        {
+          "term": "闪现300秒长CD与技能急速",
+          "mechanic_id": "GM-CD-001",
+          "concept_keywords": ["限流", "冷却周期", "高代价兜底操作"],
+          "analogy_explanation": "就像《英雄联盟》里的召唤师技能「闪现」：关键时刻能穿墙救命，但用一次要等整整 300 秒冷却，绝不能当平 A 随便乱交。"
+        }
+      ],
+      "open_with_game_template": "用【英雄联盟】的理解方式打开：用召唤师峡谷的「中娅金身、真眼破战争迷雾、闪现长CD与大龙Buff兵线推进」把抽象概念讲透。"
+    },
+    {
+      "game_id": "GAME-GENSHIN-003",
+      "game_name": "原神",
+      "aliases": ["Genshin", "Genshin Impact", "提瓦特"],
+      "genre": "GACHA_RPG",
+      "platform": "跨端 (開放世界 ARPG)",
+      "linked_mechanic_ids": ["GM-CD-001", "GM-IFRAME-007", "GM-PITY-013", "GM-SHIELD-020", "GM-SYNERGY-017"],
+      "signature_terms": [
+        {
+          "term": "元素充能效率与大招能量球回转",
+          "mechanic_id": "GM-CD-001",
+          "concept_keywords": ["令牌桶", "能量回充", "吞吐循环", "资源产消平衡"],
+          "analogy_explanation": "就像《原神》里配队堆「元素充能效率」吃微粒球：前台角色放完元素战技产出能量球，后台大招槽只有及时充能蓄满，下一轮循环才能无缝开大。"
+        },
+        {
+          "term": "钟离玉璋护盾（全属性吸收与抗打断霸体）",
+          "mechanic_id": "GM-SHIELD-020",
+          "concept_keywords": ["缓冲队列", "网关防护罩", "容错隔离", "抗干扰霸体"],
+          "analogy_explanation": "就像《原神》里钟离长按 E 套上「玉璋护盾」：只要护盾厚度没被砸穿，角色在里面输出既不扣一滴真血，也不会被怪物拍飞打断。"
+        },
+        {
+          "term": "90抽小保底与180抽大保底机制",
+          "mechanic_id": "GM-PITY-013",
+          "concept_keywords": ["重试退避上限", "确定性兜底", "最坏情况SLA保障"],
+          "analogy_explanation": "就像《原神》卡池的「大小保底」：哪怕前面运气再非一直歪，只要累计抽数撞上保底红线，系统必定强制交付当期限定五星，绝不让你无限空手而归。"
+        }
+      ],
+      "open_with_game_template": "用【原神】的理解方式打开：用提瓦特大陆的「元素充能回转、钟离玉璋护盾、元素反应倍增与抽卡大小保底」秒懂底层机制。"
+    },
+    {
+      "game_id": "GAME-WUKONG-004",
+      "game_name": "黑神话：悟空",
+      "aliases": ["黑神话", "悟空", "猴哥", "Black Myth: Wukong"],
+      "genre": "ARPG_SOULS",
+      "platform": "单机动作 (Action RPG)",
+      "linked_mechanic_ids": ["GM-ARMOR-005", "GM-IFRAME-007", "GM-CC-010", "GM-SL-004"],
+      "signature_terms": [
+        {
+          "term": "定身术（强制定格硬控）",
+          "mechanic_id": "GM-CC-010",
+          "concept_keywords": ["线程挂起", "死锁冻结", "断点调试", "Stop-The-World"],
+          "analogy_explanation": "就像《黑神话：悟空》里抬手一指打出「定身术」：不管妖怪正抬刀砍到哪一帧，瞬间被金光死死焊在原地动弹不得，等你打完一整套轻棍输出才恢复运行。"
+        },
+        {
+          "term": "攒四段棍势劈棍与识破无敌帧",
+          "mechanic_id": "GM-IFRAME-007",
+          "concept_keywords": ["写缓冲批处理", "精准异常拦截", "零拷贝穿透"],
+          "analogy_explanation": "就像《黑神话：悟空》里一边闪身攒满四颗棍势豆，一边在Boss砸地瞬间打出「识破」斩棍：不仅完美化解当次致命伤害，还顺势把攒满的爆发一次性劈出去。"
+        },
+        {
+          "term": "土地庙上香存档与缩地回档",
+          "mechanic_id": "GM-SL-004",
+          "concept_keywords": ["事务检查点", "Checkpoint", "状态回滚", "快照恢复"],
+          "analogy_explanation": "就像《黑神话：悟空》进Boss房前先在「土地庙」上柱香：就算进去挑战失手败阵，也能在土地庙满血满葫芦原样复活重来。"
+        }
+      ],
+      "open_with_game_template": "用【黑神话：悟空】的理解方式打开：用天命人的「定身术硬控、四段棍势蓄力、识破无敌帧与土地庙回档」还原底层运作。"
+    },
+    {
+      "game_id": "GAME-ELDEN-005",
+      "game_name": "艾尔登法环",
+      "aliases": ["老头环", "法环", "Elden Ring"],
+      "genre": "ARPG_SOULS",
+      "platform": "单机动作 (Souls-like ARPG)",
+      "linked_mechanic_ids": ["GM-ARMOR-005", "GM-FRAME-006", "GM-IFRAME-007", "GM-SL-004"],
+      "signature_terms": [
+        {
+          "term": "翻滚无敌帧与快慢刀预判",
+          "mechanic_id": "GM-IFRAME-007",
+          "concept_keywords": ["时间窗过滤", "优雅降级", "窗口期容错"],
+          "analogy_explanation": "就像《艾尔登法环》里看准Boss挥刀落下的那几帧翻滚：刀刃明明从模型身上穿过去，却因为处于翻滚无敌帧窗口内而毫发无伤。"
+        },
+        {
+          "term": "跳劈削韧与Boss跪地处决",
+          "mechanic_id": "GM-ARMOR-005",
+          "concept_keywords": ["熔断阈值突破", "压力累积破防", "强制中断"],
+          "analogy_explanation": "就像《艾尔登法环》里连续重击跳劈累加「削韧值」：平时Boss顶着霸体硬砍，一旦隐藏韧性条被打空就会咚的一声跪地，露出致命处决窗口。"
+        }
+      ],
+      "open_with_game_template": "用【艾尔登法环】的理解方式打开：用交界地的「翻滚无敌帧、削韧跪地处决、绿条精力透支与赐福读档」讲透核心机制。"
+    },
+    {
+      "game_id": "GAME-WOW-006",
+      "game_name": "魔兽世界",
+      "aliases": ["WOW", "魔兽", "山口山", "World of Warcraft"],
+      "genre": "MMO",
+      "platform": "端游 (MMORPG)",
+      "linked_mechanic_ids": ["GM-AGGRO-003", "GM-CD-001", "GM-MANA-002", "GM-DOT-019"],
+      "signature_terms": [
+        {
+          "term": "主T拉仇恨与DPS猛打OT",
+          "mechanic_id": "GM-AGGRO-003",
+          "concept_keywords": ["负载均衡失灵", "优先级抢占", "热点流量倾斜", "越界告警"],
+          "analogy_explanation": "就像《魔兽世界》团本里后排法师开局全开爆发猛轰，瞬间仇恨值超过前排防战触发「OT」：Boss立刻撇下坦克转头一巴掌拍向后排。"
+        },
+        {
+          "term": "公共冷却（GCD 1.5秒全局卡顿）",
+          "mechanic_id": "GM-CD-001",
+          "concept_keywords": ["全局锁", "最小调度时钟周期", "串行化间隔"],
+          "analogy_explanation": "就像《魔兽世界》按下任意瞬发技能后全技能栏同时转一圈 1.5 秒「公共冷却（GCD）」：防止所有指令在同一毫秒内无序并发挤爆总线。"
+        }
+      ],
+      "open_with_game_template": "用【魔兽世界】的理解方式打开：用艾泽拉斯团本的「主T仇恨与OT、公共冷却GCD、治疗蓝耗与Boss狂暴线」拆解系统逻辑。"
+    },
+    {
+      "game_id": "GAME-PUBG-007",
+      "game_name": "和平精英",
+      "aliases": ["绝地求生", "吃鸡", "PUBG"],
+      "genre": "FPS_BR",
+      "platform": "手游/端游 (战术竞技射击)",
+      "linked_mechanic_ids": ["GM-RECOIL-023", "GM-CIRC-024", "GM-HITBOX-022"],
+      "signature_terms": [
+        {
+          "term": "毒圈/信号区逐级收缩",
+          "mechanic_id": "GM-CIRC-024",
+          "concept_keywords": ["模拟退火收敛", "解空间压缩", "截止时间倒逼"],
+          "analogy_explanation": "就像《和平精英》里的信号区缩圈：前期全图自由搜物资，随着毒圈一轮比一轮疼、安全区越缩越小，所有幸存队伍都会被强制逼进决赛圈正面对决。"
+        },
+        {
+          "term": "压枪后坐力反向补偿",
+          "mechanic_id": "GM-RECOIL-023",
+          "concept_keywords": ["梯度下降", "负反馈控制", "误差修正"],
+          "analogy_explanation": "就像《和平精英》开全自动扫射压枪：枪口往上跳多少（误差），手指就得往反方向往下拉多少（负梯度修正），才能把子弹稳稳摁在一个点上。"
+        }
+      ],
+      "open_with_game_template": "用【和平精英】的理解方式打开：用海岛图的「决赛圈缩圈收敛、全自动压枪负反馈与三级头甲减伤过滤」秒懂原理。"
+    },
+    {
+      "game_id": "GAME-TFT-009",
+      "game_name": "金铲铲之战",
+      "aliases": ["金铲铲", "云顶之弈", "TFT", "自走棋", "Teamfight Tactics"],
+      "genre": "STRATEGY_RTS",
+      "platform": "跨端策略自走棋 (Auto-Battler)",
+      "linked_mechanic_ids": ["GM-SYNERGY-017", "GM-INFLATION-008", "GM-PITY-013", "GM-SNOWBALL-012"],
+      "signature_terms": [
+        {
+          "term": "存50块吃满5块钱利息与D牌搜卡",
+          "mechanic_id": "GM-SNOWBALL-012",
+          "concept_keywords": ["复利运营", "缓存资源预留", "延迟满足", "探索与利用权衡", "explore-exploit"],
+          "analogy_explanation": "就像《金铲铲之战》里忍住不乱D牌、先攒够50金币卡着每回合最高5块利息升级人口：前期少花本金换取稳定复利现金流，等升到高人口高概率时再一波搜出高费主C。"
+        },
+        {
+          "term": "羁绊凑齐质变与转职纹章",
+          "mechanic_id": "GM-SYNERGY-017",
+          "concept_keywords": ["模块化组合", "接口适配器", "集群涌现效应", "插件挂载", "adapter"],
+          "analogy_explanation": "就像《金铲铲之战》里给外援英雄戴上一枚「转职金铲铲纹章」凑齐大羁绊：原本毫不相干的棋子瞬间接入同一套属性光环，触发全队质变。"
+        }
+      ],
+      "open_with_game_template": "用【金铲铲之战】的理解方式打开：用棋盘上的「卡50利息复利运营、搜卡概率分布与羁绊纹章适配」一眼看懂底层权衡。"
+    },
+    {
+      "game_id": "GAME-STARDEW-010",
+      "game_name": "星露谷物语",
+      "aliases": ["星露谷", "种田游戏", "Stardew Valley", "动物森友会", "动森"],
+      "genre": "UNIVERSAL",
+      "platform": "模拟经营 (Cozy Simulation)",
+      "linked_mechanic_ids": ["GM-CD-001", "GM-MANA-002", "GM-SUPPLY-025"],
+      "signature_terms": [
+        {
+          "term": "每日体力条上限与凌晨两点强制晕倒",
+          "mechanic_id": "GM-MANA-002",
+          "concept_keywords": ["时间片配额", "硬超时截断", "看门狗强制回收", "资源耗尽", "timeout"],
+          "analogy_explanation": "就像《星露谷物语》里每天干活受绿色体力条限制，且一到凌晨两点无论你在矿洞第几层都会当场晕倒被抬回家扣钱：系统设有硬性超时红线，绝不允许单个任务无限熬夜霸占线程。"
+        },
+        {
+          "term": "自动洒水器与酿酒桶异步流水线",
+          "mechanic_id": "GM-SUPPLY-025",
+          "concept_keywords": ["异步批处理", "定时任务Cron", "后台流水线", "非阻塞执行", "async pipeline"],
+          "analogy_explanation": "就像《星露谷物语》里摆好铱制洒水器和满屋子酿酒桶：早上把杨桃塞进桶里就尽管下矿钓鱼去，后台自己按周期发酵产出，完全不用站在桶前傻等。"
+        }
+      ],
+      "open_with_game_template": "用【星露谷物语】的理解方式打开：用农场里的「体力条与两点晕倒硬超时、洒水器定时批处理与酿酒桶异步流水线」轻松讲透机制。"
+    },
+    {
+      "game_id": "GAME-VAL-011",
+      "game_name": "无畏契约",
+      "aliases": ["瓦罗兰特", "打瓦", "Valorant", "CS2", "CSGO", "反恐精英"],
+      "genre": "FPS_BR",
+      "platform": "战术射击 (Tactical FPS)",
+      "linked_mechanic_ids": ["GM-RECOIL-023", "GM-FOG-014", "GM-FRAME-006"],
+      "signature_terms": [
+        {
+          "term": "急停开枪（速度归零消除移动弹道散布）",
+          "mechanic_id": "GM-FRAME-006",
+          "concept_keywords": ["状态同步屏障", "内存屏障", "读写一致性静止窗口", "memory barrier", "quiescence"],
+          "analogy_explanation": "就像《无畏契约》或《CS2》里边跑边打子弹会乱飞上天，必须在扣扳机前一瞬间反按方向键「急停」让移动速度归零：系统必须先让并发变动的状态彻底静默对齐，这一枪读写才能精准命中靶心。"
+        },
+        {
+          "term": "烟位封烟隔断视线与信息位清点",
+          "mechanic_id": "GM-FOG-014",
+          "concept_keywords": ["网络隔离", "访问控制", "探针扫描", "零信任探路", "subnet isolation"],
+          "analogy_explanation": "就像《无畏契约》进攻进点前先往狙击位封一颗烟球隔断对面视野，再放探测箭扫清包点死角：先屏蔽高危外部干扰源，再用轻量探针确认目标区安全后大部队才进场提交。"
+        }
+      ],
+      "open_with_game_template": "用【无畏契约 / CS2】的理解方式打开：用战术射击里的「急停对齐屏障、封烟隔离干扰与探测箭清点扫描」干脆利落地还原机制。"
+    },
+    {
+      "game_id": "GAME-CIV-012",
+      "game_name": "文明6",
+      "aliases": ["文明", "再来一回合", "Civilization", "Civ6"],
+      "genre": "STRATEGY_RTS",
+      "platform": "4X策略战棋 (4X Turn-Based Strategy)",
+      "linked_mechanic_ids": ["GM-FOG-014", "GM-SNOWBALL-012", "GM-SUPPLY-025"],
+      "signature_terms": [
+        {
+          "term": "科技树前置依赖与尤里卡（Eureka）加速",
+          "mechanic_id": "GM-SUPPLY-025",
+          "concept_keywords": ["有向无环图DAG", "拓扑排序", "前置编译依赖", "启发式剪枝加速", "DAG"],
+          "analogy_explanation": "就像《文明6》点科技树：没研发出「制陶术」和「灌溉」就绝不可能直接点出「现代农业」（严格遵循有向无环图拓扑依赖）；而一旦在实战中达成特定条件触发「尤里卡」，研发进度直接砍半提速。"
+        }
+      ],
+      "open_with_game_template": "用【文明6】的理解方式打开：用帝国规划里的「科技树DAG前置依赖、尤里卡启发式加速与区域相邻加成」看清全局架构。"
+    },
+    {
+      "game_id": "GAME-MC-013",
+      "game_name": "我的世界",
+      "aliases": ["Minecraft", "MC", "方块世界", "红石"],
+      "genre": "SANDBOX_SURVIVAL",
+      "platform": "全平台沙盒建造 (Sandbox / Redstone Logic)",
+      "linked_mechanic_ids": ["GM-SUPPLY-025", "GM-FOG-014", "GM-CD-001"],
+      "signature_terms": [
+        {
+          "term": "区块按需加载（Chunk Loading）与视距卸载",
+          "mechanic_id": "GM-FOG-014",
+          "concept_keywords": ["虚拟内存分页", "懒加载", "按需渲染", "分片淘汰", "lazy loading"],
+          "analogy_explanation": "就像《我的世界》里的区块加载机制：地图理论上无限大，但游戏永远只把你角色脚下周围视距内的几个区块加载进内存运转红石与刷怪，走远了的区块立刻冻结存盘卸载，绝不把整张无限地图一次性塞爆内存。"
+        },
+        {
+          "term": "红石中继器信号衰减与刻（Tick）延迟中继",
+          "mechanic_id": "GM-CD-001",
+          "concept_keywords": ["信号中继放大", "时钟周期同步", "流水线延迟对齐", "TTL衰减"],
+          "analogy_explanation": "就像《我的世界》铺红石线路：红石粉传满 15 格信号就会彻底衰减归零（TTL 耗尽），必须每隔一段放一个「红石中继器」把信号重新拉满并引入固定红石刻延迟，才能让远端活塞严丝合缝按时序推开。"
+        }
+      ],
+      "open_with_game_template": "用【我的世界】的理解方式打开：用方块沙盒里的「区块按需懒加载、红石15格信号衰减与中继器时钟对齐」还原系统运转。"
+    }
+  ],
+  "entries": [
+    {
+      "id": "GM-CD-001",
+      "term_zh": "技能冷却 / CD",
+      "term_en": "Cooldown (CD)",
+      "aliases": ["CD", "冷却时间", "技能读秒", "充能层数"],
+      "genre": "MOBA",
+      "category": "resource_management",
+      "mechanic_definition": "技能或指令在触发后必须等待经过的强制时间间隔，在冷却计时归零前无法再次施放。",
+      "abstract_concept_mapping": ["限流", "节流", "令牌桶", "请求降频", "恢复周期", "rate limit", "throttle"],
+      "real_life_analogy": "微波炉加热完毕后的强制散热保护倒计时，未完成前按启动键无响应。",
+      "narrative_boundary_tip": "单次转换控制在两句话以内，重点放在固定恢复时钟与按键失效的因果机制上。",
+      "conversion_examples": [
+        {
+          "source_concept": "API 网关令牌桶限流与突发流量保护",
+          "game_analogy_output": "技能冷却（CD）与充能层数：攒满 3 层充能可以瞬间连放 3 次应对突发流量，但层数用光后只能按秒读条恢复，狂点按键也放不出技能。",
+          "boundary_limitation": "CD基于固定时间流逝恢复，令牌桶算法还受桶深容量与队列反压的综合调节。"
+        }
+      ]
+    },
+    {
+      "id": "GM-MANA-002",
+      "term_zh": "蓝耗 / MP",
+      "term_en": "Mana Cost / MP",
+      "aliases": ["蓝条", "魔法消耗", "MP", "法力值"],
+      "genre": "MMO",
+      "category": "resource_management",
+      "mechanic_definition": "角色执行特定技能或维持特定状态所需消耗的能量储备池，储备归零时无法发动相应技能。",
+      "abstract_concept_mapping": ["内存堆栈配额", "燃油预算", "API调用额度", "电量消耗", "配额截断"],
+      "real_life_analogy": "手机电池剩余电量，开启高功耗3D游戏会迅速耗光并进入强制休眠关机状态。",
+      "narrative_boundary_tip": "用能量池存量与触发阈值对应，严禁铺垫法师身世或魔力泉水背景故事。",
+      "conversion_examples": [
+        {
+          "source_concept": "微服务单次请求内存配额与OOM防范",
+          "game_analogy_output": "技能蓝耗：每个高功耗操作都要扣除固定的能量预算，一旦蓝条见底，再强力的杀招也会直接哑火。",
+          "boundary_limitation": "游戏蓝耗通常是非0即1的硬截断，工业系统常有降级或排队缓冲等软容忍机制。"
+        }
+      ]
+    },
+    {
+      "id": "GM-AGGRO-003",
+      "term_zh": "仇恨值 / 仇恨机制",
+      "term_en": "Threat / Aggro",
+      "aliases": ["仇恨", "OT", "仇恨列表", "引怪", "抢仇恨"],
+      "genre": "MMO",
+      "category": "threat_and_targeting",
+      "mechanic_definition": "敌方AI通过量化各玩家造成的伤害、治疗及挑衅行为计算出的关注度权重，决定首要攻击目标。",
+      "abstract_concept_mapping": ["优先级队列调度", "关注度评分", "流量倾斜", "靶向报警", "热点流量锁定"],
+      "real_life_analogy": "哭声最响亮的婴儿最先获得喂奶，现场最显眼的靶子吸引所有人的注意焦点。",
+      "narrative_boundary_tip": "锁定谁输出最大谁被集火的因果律，两句话切中要害，不讲团队打本战况。",
+      "conversion_examples": [
+        {
+          "source_concept": "风控系统对高危异常行为的靶向警报与流量锁定",
+          "game_analogy_output": "仇恨值与OT机制：谁在短时间内制造了最大噪音（高DPS或过量治疗），Boss的攻击焦点就会立即转移并锁定谁。",
+          "boundary_limitation": "游戏仇恨是确定性线性累加，现实世界中的流量关注受复杂的多维随机扰动影响。"
+        }
+      ]
+    },
+    {
+      "id": "GM-SL-004",
+      "term_zh": "读档 / SL大法",
+      "term_en": "Save & Load (SL)",
+      "aliases": ["SL", "存档读档", "回档", "悔棋", "检查点"],
+      "genre": "UNIVERSAL",
+      "category": "system_and_meta",
+      "mechanic_definition": "将当前游戏运行内存状态序列化持久化到非易失存储，当遭遇失败时恢复至先前状态重试。",
+      "abstract_concept_mapping": ["数据库事务回滚", "ACID Undo", "快照恢复", "Checkpoint", "状态机重置", "transaction", "rollback"],
+      "real_life_analogy": "拆装精细机械表零件前先拍一张高清照片，一旦组装顺序装错就比对照片复原重来。",
+      "narrative_boundary_tip": "用无损退回安全基线对应事务回滚，不要编造玩家反复刷极品装备的剧情。",
+      "conversion_examples": [
+        {
+          "source_concept": "分布式数据库两阶段提交中的Abort回滚操作",
+          "game_analogy_output": "副本检查点团灭读档：只要执行中途有人触发致命异常，全系统立即回滚到进入检查点时的干净状态。",
+          "boundary_limitation": "单机SL能完全抹平时间，分布式现实系统中已发出的外部副作用无法实现绝对无痕撤销。"
+        }
+      ]
+    },
+    {
+      "id": "GM-ARMOR-005",
+      "term_zh": "霸体 / 韧性",
+      "term_en": "Super Armor / Poise",
+      "aliases": ["霸体", "强韧度", "抗硬直", "不可打断", "黄条"],
+      "genre": "ARPG_SOULS",
+      "category": "crowd_control_defense",
+      "mechanic_definition": "在执行动作期间免疫轻度硬直与击退效果的状态，仅在受到的削韧值累计超过阈值后才会被打断。",
+      "abstract_concept_mapping": ["不可屏蔽中断", "非抢占式执行", "锁保护关键区", "抗干扰容错", "关键事务保护"],
+      "real_life_analogy": "重型推土机轰鸣向前推进，两侧飞溅的碎石泥沙完全无法打乱其履带的行进节奏。",
+      "narrative_boundary_tip": "强调动作执行过程中的抗干扰免疫与受创积累上限，严禁冗长格斗描述。",
+      "conversion_examples": [
+        {
+          "source_concept": "操作系统关键区自旋锁与非抢占保护",
+          "game_analogy_output": "霸体与破韧机制：在执行关键任务期间免疫一切轻微打断干扰，除非外部冲击超过韧性上限导致彻底破防。",
+          "boundary_limitation": "霸体期间系统往往仍在承受后台伤害积累，过度硬抗外部负载易导致隐性崩溃。"
+        }
+      ]
+    },
+    {
+      "id": "GM-FRAME-006",
+      "term_zh": "判定帧与前后摇",
+      "term_en": "Startup, Active, Recovery Frames",
+      "aliases": ["前摇", "后摇", "帧数表", "硬直", "判定窗口"],
+      "genre": "FTG",
+      "category": "frame_and_timing",
+      "mechanic_definition": "动作在时间轴上的切片细分：前摇为启动前置耗时，判定帧为产生交互生效窗口，后摇为动作收尾锁死耗时。",
+      "abstract_concept_mapping": ["流水线阶段延迟", "握手耗时", "执行窗口", "资源回收耗时", "调度开销", "pipeline delay"],
+      "real_life_analogy": "打高尔夫球时的引杆蓄力（前摇）、击球一瞬间（判定帧）、顺势送杆收杆（后摇）。",
+      "narrative_boundary_tip": "切分前置准备、生效窗口与收尾僵直三个阶段，直击时序要害。",
+      "conversion_examples": [
+        {
+          "source_concept": "网络RPC调用的连接建立、数据传输与资源释放周期",
+          "game_analogy_output": "技能前后摇与判定帧：函数在正式生效前有微秒级的前置准备（前摇），生效窗口仅有几毫秒，结束后还有无法取消的收尾硬直（后摇）。",
+          "boundary_limitation": "格斗游戏以60fps离散步进为基准，而网络服务底层时延受CPU上下文切换的非线性抖动影响。"
+        }
+      ]
+    },
+    {
+      "id": "GM-IFRAME-007",
+      "term_zh": "无敌帧",
+      "term_en": "Invulnerability Frames (i-frames)",
+      "aliases": ["翻滚无敌", "无敌帧", "闪避帧", "免伤窗口"],
+      "genre": "ARPG_SOULS",
+      "category": "frame_and_timing",
+      "mechanic_definition": "特定位移或交互动作中持续极短的一组帧数区间，在此期间角色不受任何敌方伤害碰撞判定。",
+      "abstract_concept_mapping": ["瞬态安全点", "垃圾回收安全区", "原子操作窗口", "瞬时故障屏蔽", "safe point"],
+      "real_life_analogy": "暴雨倾盆的瞬间迅速跃入避雨回廊，在电光石火间完全避开积水溅射。",
+      "narrative_boundary_tip": "突出瞬时窗口期与精准时机把握，两句话点透，不扩展黑魂跑图经历。",
+      "conversion_examples": [
+        {
+          "source_concept": "JVM垃圾回收中的Stop-The-World安全点与隔离屏障",
+          "game_analogy_output": "翻滚无敌帧：在系统发生剧烈资源颠簸的毫秒级瞬间，开启极短的屏蔽保护，避开外部全量碰撞伤害。",
+          "boundary_limitation": "无敌帧窗口通常极其短暂，一旦时机偏差哪怕毫秒级也会导致全额伤害穿透。"
+        }
+      ]
+    },
+    {
+      "id": "GM-INFLATION-008",
+      "term_zh": "数值膨胀",
+      "term_en": "Stat Inflation / Power Creep",
+      "aliases": ["数值膨胀", "战力崩坏", "环境内卷", "退环境"],
+      "genre": "GACHA_RPG",
+      "category": "progression_economy",
+      "mechanic_definition": "为了刺激新内容消费，持续推出基础数值或机制乘区更高的新角色，导致既有旧体系迅速贬值淘汰。",
+      "abstract_concept_mapping": ["货币通胀", "技术债累积", "接口膨胀", "战力内卷", "架构老化", "deprecate"],
+      "real_life_analogy": "纸币面值持续贬值，几十年前的一万元巨款如今只够买一次普通的家用数码配件。",
+      "narrative_boundary_tip": "用版本迭代对旧逻辑的无情淘汰做比，直奔老接口贬值主题。",
+      "conversion_examples": [
+        {
+          "source_concept": "微服务老旧接口因参数过度叠加导致的架构退化与废弃",
+          "game_analogy_output": "版本数值膨胀：新模块为了吸引眼球不断堆砌参数，导致老旧接口和旧逻辑完全丧失竞争力和可用性，被迫淘汰。",
+          "boundary_limitation": "商业游戏数值膨胀常为商业促氪故意设计，系统软件架构退化多因缺少前置重构治理。"
+        }
+      ]
+    },
+    {
+      "id": "GM-DPS-009",
+      "term_zh": "DPS / 秒伤",
+      "term_en": "Damage Per Second (DPS)",
+      "aliases": ["DPS", "秒伤", "持续伤害", "输出爆发"],
+      "genre": "MMO",
+      "category": "combat_action_flow",
+      "mechanic_definition": "在单位时间（每秒）内角色能够稳定输出的伤害均值，综合反映攻击力、攻速及暴击概率乘积。",
+      "abstract_concept_mapping": ["系统吞吐量", "QPS/TPS", "持续带宽", "稳定产能", "throughput"],
+      "real_life_analogy": "水管以每秒10升的均匀恒定流速向水池注水，衡量单位时间的稳定灌注量。",
+      "narrative_boundary_tip": "突出平均持续产能而非瞬时单点击穿，控制在一句话概括。",
+      "conversion_examples": [
+        {
+          "source_concept": "高性能Web服务器高并发基准测试的每秒请求数QPS",
+          "game_analogy_output": "持续DPS吞吐量：评价系统不仅看单个大招爆发有多猛，更看高并发下每秒稳定处理业务的平均持续输出。",
+          "boundary_limitation": "DPS测算通常假定目标固定木桩受击，实际复杂高负荷环境下存在排队阻尼与网络丢包。"
+        }
+      ]
+    },
+    {
+      "id": "GM-AOE-010",
+      "term_zh": "AoE / 范围伤害",
+      "term_en": "Area of Effect (AoE)",
+      "aliases": ["AOE", "群攻", "范围伤害", "全屏大招"],
+      "genre": "MOBA",
+      "category": "combat_action_flow",
+      "mechanic_definition": "作用效果覆盖特定几何空间区域的技能，使该区域内的所有符合判定条件的实体同时受到影响。",
+      "abstract_concept_mapping": ["广播", "多播", "Multicast", "Fan-out 扇出", "批量处理", "broadcast"],
+      "real_life_analogy": "草坪喷灌喷头开启后，水雾瞬间覆盖方圆十米内的每一片草地。",
+      "narrative_boundary_tip": "抓取单次触发全员生效的扇出特征，不延伸技能特效展示。",
+      "conversion_examples": [
+        {
+          "source_concept": "消息队列中的Pub/Sub扇出分发与事件总线广播",
+          "game_analogy_output": "范围AoE多播：单次指令不再单点发送，而是一键扇出覆盖整个网络分区内的全部订阅节点。",
+          "boundary_limitation": "AoE通常存在范围边际衰减或实体数量上限，无节制的全局广播会引发雪崩式的广播风暴。"
+        }
+      ]
+    },
+    {
+      "id": "GM-CC-011",
+      "term_zh": "CC / 控制技能",
+      "term_en": "Crowd Control (CC)",
+      "aliases": ["CC", "控制", "眩晕", "沉默", "定身", "控制链"],
+      "genre": "MOBA",
+      "category": "crowd_control_defense",
+      "mechanic_definition": "限制敌方单位行动自由或剥夺其施法能力的机制集合，包含硬控（昏迷、击飞）与软控（减速、沉默）。",
+      "abstract_concept_mapping": ["背压", "Backpressure", "线程挂起", "限流降级", "阻塞I/O", "suspend"],
+      "real_life_analogy": "十字路口的交通红灯强行阻断车流前进，直到下游路段疏通完毕再放行。",
+      "narrative_boundary_tip": "以强行剥夺处理能力或挂起对应背压，避免编造控制打架台词。",
+      "conversion_examples": [
+        {
+          "source_concept": "流式处理管道在下游阻塞时的背压反向抑制机制",
+          "game_analogy_output": "眩晕与控制链（CC）：当流水线过载时，向上游发送阻塞信号挂起请求，直到下游消化完毕再解除定身。",
+          "boundary_limitation": "游戏CC机制包含递减抗性收益，工业背压如果缺乏超时兜底极易演变为系统级永久死锁。"
+        }
+      ]
+    },
+    {
+      "id": "GM-RNG-012",
+      "term_zh": "RNG / 随机概率",
+      "term_en": "Random Number Generation (RNG)",
+      "aliases": ["RNG", "概率", "掷骰子", "随机数", "暴击率"],
+      "genre": "ROGUELIKE",
+      "category": "system_and_meta",
+      "mechanic_definition": "基于伪随机算法计算胜负、暴击或道具掉落的机制，打破完全确定性推导引入可变趣味性。",
+      "abstract_concept_mapping": ["蒙特卡洛采样", "随机抖动重试", "哈希一致性", "随机扰动", "jitter"],
+      "real_life_analogy": "投掷六面骰子决定棋子前进步数，每次投掷都在给定规则下产生不确定落点。",
+      "narrative_boundary_tip": "用随机抖动打破共振的逻辑进行映射，不赘述玄学抽奖心理。",
+      "conversion_examples": [
+        {
+          "source_concept": "微服务高并发重试时的指数退避加随机抖动算法",
+          "game_analogy_output": "随机抖动（RNG Jitter）：在高并发重试时引入随机时间偏移，防止成千上万个请求像约好了一样同秒冲垮机房。",
+          "boundary_limitation": "计算机伪随机具有伪随机种子依赖，而高安全级别场景需依赖物理真随机熵源支持。"
+        }
+      ]
+    },
+    {
+      "id": "GM-PITY-013",
+      "term_zh": "保底机制",
+      "term_en": "Gacha Pity / Guarantee",
+      "aliases": ["保底", "大保底", "小保底", "井", "硬上限"],
+      "genre": "GACHA_RPG",
+      "category": "progression_economy",
+      "mechanic_definition": "为防止极端运气惩罚设立的确定性保护：在连续未命中既有概率事件达到指定次数后，强制必定触发目标奖励。",
+      "abstract_concept_mapping": ["SLA服务级别协议", "看门狗超时兜底", "确定性上界", "最坏情况保证", "timeout fallback"],
+      "real_life_analogy": "咖啡店常客集点卡，无论前9杯买什么，集满第10个印章必定免费获赠一杯特饮。",
+      "narrative_boundary_tip": "突出最坏情况下的刚性下限兜底，两句话点透即可。",
+      "conversion_examples": [
+        {
+          "source_concept": "微服务降级兜底方案与SLA最坏响应耗时承诺",
+          "game_analogy_output": "抽卡保底机制（Pity）：系统允许一定范围内的随机重试失败，但设置硬性上限，次数达到阈值必定命中兜底交付。",
+          "boundary_limitation": "抽卡保底触发后会立刻归零重置计数器，而工业SLA往往要求长期持续合规履约。"
+        }
+      ]
+    },
+    {
+      "id": "GM-KITING-014",
+      "term_zh": "走A与风筝",
+      "term_en": "Kiting / Stutter-Step",
+      "aliases": ["走A", "风筝", "拉扯", "走位普攻", "走砍"],
+      "genre": "MOBA",
+      "category": "combat_action_flow",
+      "mechanic_definition": "在普通攻击的前后摇间隙通过移动指令取消部分多余动作，维持自身处于敌方攻击范围外的安全交战距离。",
+      "abstract_concept_mapping": ["非阻塞异步事件轮询", "任务交错流水线", "边际资源利用", "事件驱动", "interleaving"],
+      "real_life_analogy": "牵着充满活力的小狗边倒退边慢跑，始终保持牵引绳紧绷却不被扑到身上。",
+      "narrative_boundary_tip": "聚焦在利用动作空档穿插位移的交错并行特性，不写选手微操手速。",
+      "conversion_examples": [
+        {
+          "source_concept": "Node.js 单线程事件循环在等待I/O时的非阻塞交错执行",
+          "game_analogy_output": "走A与边缘拉扯：在每次处理计算的空档期利用等待微秒穿插移动，既不浪费普攻后摇，又始终处于安全距离外。",
+          "boundary_limitation": "走A高度依赖毫秒级低延迟响应，现实中出现任何偶发网络丢包都会导致直接被抓翻车。"
+        }
+      ]
+    },
+    {
+      "id": "GM-FOG-015",
+      "term_zh": "战争迷雾与视野",
+      "term_en": "Fog of War & Vision",
+      "aliases": ["战争迷雾", "视野", "插眼", "假眼", "视野盲区"],
+      "genre": "STRATEGY_RTS",
+      "category": "spatial_and_vision",
+      "mechanic_definition": "隐藏未被己方单位或建筑物视线直接覆盖的地形与敌情动态的信息不对称机制，需要布置侦察手段探明。",
+      "abstract_concept_mapping": ["观测盲区", "心跳探针", "服务发现感知边界", "可观测性", "分布式追踪", "observability"],
+      "real_life_analogy": "夜间无路灯漆黑道路上行驶，车前大灯照射范围之外全是一片漆黑不可知盲区。",
+      "narrative_boundary_tip": "以主动侦查探针驱散未知盲区为核心对比，严禁构建虚构军事战局。",
+      "conversion_examples": [
+        {
+          "source_concept": "Prometheus探针与OpenTelemetry链路追踪在大型集群中的视野发现",
+          "game_analogy_output": "视野插眼与迷雾勘探：在未经监控探测的无界网络里点亮探针，实时将盲区内的节点动态同步给监控看板。",
+          "boundary_limitation": "监控探针存在采样率与更新时延，无法如游戏固定雷达一样做到绝对零盲区与全息掌控。"
+        }
+      ]
+    },
+    {
+      "id": "GM-TURRET-016",
+      "term_zh": "防御塔保护机制",
+      "term_en": "Turret Aggro / Tower Protection",
+      "aliases": ["防御塔", "越塔", "防卫机制", "防御塔仇恨"],
+      "genre": "MOBA",
+      "category": "threat_and_targeting",
+      "mechanic_definition": "领地保护建筑在己方英雄受到越界侵害时，无视其他目标强行将攻击目标锁定越界者的高额惩罚机制。",
+      "abstract_concept_mapping": ["边界安全防火墙", "越权访问告警", "零信任审计", "安全拦截", "firewall"],
+      "real_life_analogy": "安全门禁闸机正常平静放行，一旦有人强行跨越翻越，报警哨笛与防暴门瞬间自动闭锁锁死。",
+      "narrative_boundary_tip": "用越界即被集火反打的刚性安全门禁做类比，不扩展战局叙事。",
+      "conversion_examples": [
+        {
+          "source_concept": "API网关越权访问自动识别与高频封锁机制",
+          "game_analogy_output": "防御塔仇恨判定：外部流量在合规通道内相安无事，一旦有人越权对核心服务发起越界越狱请求，防御塔立即激活集火反打。",
+          "boundary_limitation": "游戏防御塔仇恨可通过小兵炮灰轻易换顶转移，而现代企业网络防火墙策略防线更严密。"
+        }
+      ]
+    },
+    {
+      "id": "GM-BUILD-017",
+      "term_zh": "构筑与配装",
+      "term_en": "Build & Synergies",
+      "aliases": ["BD", "配装", "流派", "技能羁绊", "出装思路"],
+      "genre": "ROGUELIKE",
+      "category": "progression_economy",
+      "mechanic_definition": "根据核心机制将技能、天赋、装备与词条有机组合形成高度协同效应的系统方案，追求整体收益最大化。",
+      "abstract_concept_mapping": ["依赖注入", "架构组件选型", "协议组合收益", "技术栈协同", "architecture synergy"],
+      "real_life_analogy": "自己动手组装高配电脑主机，主板插槽、显卡功耗与电源瓦数必须精准适配协同工作。",
+      "narrative_boundary_tip": "突出组件搭配的互补咬合，绝不单纯崇拜单点数值，一两句讲明。",
+      "conversion_examples": [
+        {
+          "source_concept": "微服务技术栈在缓存层、持久层与消息中间件之间的架构选型组合",
+          "game_analogy_output": "核心构筑与羁绊协同（Build）：不迷信单一顶级配置，而是将轻量级缓存、异步队列和存储引擎精准咬合，达到 1+1>2 的整体效能。",
+          "boundary_limitation": "高度特化的极限构筑往往非常脆弱，底层某个基础参数若被版本削弱可能导致全套方案崩溃。"
+        }
+      ]
+    },
+    {
+      "id": "GM-PERMADEATH-018",
+      "term_zh": "永久死亡",
+      "term_en": "Permadeath",
+      "aliases": ["永久死亡", "一命通关", "删档重来", "硬核模式"],
+      "genre": "ROGUELIKE",
+      "category": "system_and_meta",
+      "mechanic_definition": "角色一旦生命值归零，当前进度完全销毁且不可复原，系统抹去全部局内临时状态重新开局。",
+      "abstract_concept_mapping": ["无状态容器", "Stateless Pod", "崩溃即终结软件", "不可变基础设施", "immutable pod"],
+      "real_life_analogy": "沙滩上辛苦堆砌的精致沙雕被涨潮海水彻底拍平，没有存档，下一次从平整沙滩重新做起。",
+      "narrative_boundary_tip": "用彻底销毁不原地抢救对应无状态实例重新拉起，简练直接。",
+      "conversion_examples": [
+        {
+          "source_concept": "Kubernetes Pod 在发生不可逆故障时的就地销毁重建原则",
+          "game_analogy_output": "永久死亡机制（Permadeath）：无状态服务实例崩溃后绝不尝试在原地缝缝补补，直接销毁容器重新拉起崭新实例。",
+          "boundary_limitation": "纯粹永久死亡仅适用于彻底无状态计算节点，包含外部持久化存储挂载的服务必须做持久化数据保护。"
+        }
+      ]
+    },
+    {
+      "id": "GM-INTERRUPT-019",
+      "term_zh": "打断机制",
+      "term_en": "Interrupt / Silence",
+      "aliases": ["打断", "断条", "沉默", "脚踢", "打断施法"],
+      "genre": "MMO",
+      "category": "crowd_control_defense",
+      "mechanic_definition": "在敌方目标吟唱或引导法术的读条窗口期内施加阻断技能，强制取消其施法动作并施加短暂沉默惩罚。",
+      "abstract_concept_mapping": ["熔断器", "AbortSignal 取消令牌", "异常拦截器", "长任务截断", "cancellation token"],
+      "real_life_analogy": "台上发言者正要宣布错误的危险决定时，台下安全员果断切断麦克风总电源让音箱瞬间静音。",
+      "narrative_boundary_tip": "着重讲在未生效的前置吟唱期截杀因果，两句话讲透。",
+      "conversion_examples": [
+        {
+          "source_concept": "前端异步请求在用户快速切换页面时的 AbortController 拦截取消",
+          "game_analogy_output": "施法打断（Interrupt）：监测到上游正在发起耗时超长的危险大招时，在吟唱进度条结束前强行发送中止信号截断执行。",
+          "boundary_limitation": "打断只能在前置吟唱读条期内起效，法术一旦脱手完成结算，打断动作即失去拦截拦截价值。"
+        }
+      ]
+    },
+    {
+      "id": "GM-ENRAGE-020",
+      "term_zh": "软狂暴与硬狂暴",
+      "term_en": "Soft & Hard Enrage",
+      "aliases": ["狂暴", "狂暴时间", "软狂暴", "硬狂暴", "团灭倒计时"],
+      "genre": "MMO",
+      "category": "combat_action_flow",
+      "mechanic_definition": "副本首领设定的战斗限时机制：硬狂暴为计时归零直接全屏团灭，软狂暴为场地随时间恶化迫使队伍无法无限拉扯。",
+      "abstract_concept_mapping": ["硬超时终止", "优雅降级超时", "内存耗尽倒计时", "死线约束", "deadline"],
+      "real_life_analogy": "闭卷考试交卷铃声响起的绝对截断（硬狂暴），与火灾报警演练现场烟雾缓慢蔓延逼退全员（软狂暴）。",
+      "narrative_boundary_tip": "用倒计时归零的刚性熔断终止来类比系统死线，不编造首领台词。",
+      "conversion_examples": [
+        {
+          "source_concept": "微服务调用全链路超时的软超时重试与硬超时全局截断",
+          "game_analogy_output": "狂暴机制检测：设定业务处理的时间阈值，在硬狂暴倒计时归零时果断丢弃任务释放连接，严防僵尸进程拖垮全局。",
+          "boundary_limitation": "游戏狂暴是强制人为设定的通关门槛，系统工程中超时阈值设得过短会误杀长事务批量计算。"
+        }
+      ]
+    },
+    {
+      "id": "GM-STAMINA-021",
+      "term_zh": "绿条与耐力槽",
+      "term_en": "Stamina Gauge",
+      "aliases": ["耐力", "精力", "体力", "绿条", "气力"],
+      "genre": "ARPG_SOULS",
+      "category": "resource_management",
+      "mechanic_definition": "角色执行攻击、翻滚、格挡等物理动作所消耗的瞬时资源槽，消耗殆尽时将无法做出机动并陷入破防惩罚。",
+      "abstract_concept_mapping": ["瞬时并发限流", "线程突发储备", "资源透支保护", "突发容量", "burst capacity"],
+      "real_life_analogy": "百米冲刺选手的瞬间爆发体力，全力狂奔冲线后必须双手扶膝大口喘息无法立即再跑。",
+      "narrative_boundary_tip": "对比连续动作透支后的强制冷却惩罚，一到两句话切中关键。",
+      "conversion_examples": [
+        {
+          "source_concept": "线程池与连接池在高突发请求下的瞬时资源透支保护",
+          "game_analogy_output": "耐力槽（绿条）：即使手速再快也不能无限闪避输出，每次操作都要消耗绿条，见底时强制进入不可行动的喘息僵直。",
+          "boundary_limitation": "现实服务器可通过云端弹性伸缩动态拉升容量上限，而单机游戏绿条是严格闭环的内生限制。"
+        }
+      ]
+    },
+    {
+      "id": "GM-FROSTBITE-022",
+      "term_zh": "异常状态积累与抗性",
+      "term_en": "Status Gauge & Resistance",
+      "aliases": ["异常积累", "冰冻条", "出血槽", "抗性阈值", "蓄积槽"],
+      "genre": "ARPG_SOULS",
+      "category": "crowd_control_defense",
+      "mechanic_definition": "受击时异常属性（如毒、冰、出血）按数值在隐蔽蓄积槽中累计，一旦达到上限阈值瞬间爆发出重大削弱状态。",
+      "abstract_concept_mapping": ["故障积分累加器", "慢日志阈值触发", "熔断统计窗口", "滑动窗口计数", "sliding window counter"],
+      "real_life_analogy": "棉质衣服被细密毛毛雨持续打湿，水滴不断被吸收，直到湿度达到饱和的一瞬间才开始向内渗透滴水。",
+      "narrative_boundary_tip": "用量变到质变的滑动窗口阈值爆发展示机制，不过度展开魔物猎杀故事。",
+      "conversion_examples": [
+        {
+          "source_concept": "分布式熔断器在滑动窗口内累计异常比例超过阈值瞬间跳闸",
+          "game_analogy_output": "异常值积累触发：系统偶发错误不立即报警，而是将故障点数计入监控仪表盘，一旦在滑动窗口内积满条目立即触发熔断。",
+          "boundary_limitation": "异常积累条具备自然衰减周期，若统计窗口算法未配置合理衰减则陈旧历史错误会误伤当前判决。"
+        }
+      ]
+    },
+    {
+      "id": "GM-RECOIL-023",
+      "term_zh": "压枪与弹道散布",
+      "term_en": "Recoil Control & Spread",
+      "aliases": ["压枪", "后坐力", "弹道散布", "垂直后坐", "水平散布"],
+      "genre": "FPS_BR",
+      "category": "combat_action_flow",
+      "mechanic_definition": "枪械持续射击时产生的上跳和随机散布，需要玩家通过反向推拉准星进行负反馈补偿以稳定弹着点。",
+      "abstract_concept_mapping": ["梯度下降", "学习率", "负反馈调节", "PID控制", "误差修正", "gradient descent", "feedback control"],
+      "real_life_analogy": "消防水龙喷射出极高压水流时，双手必须全力反向用力下压才能稳稳对准着火点。",
+      "narrative_boundary_tip": "突出误差反馈与反向修正抵消，两句话把梯度或PID控制讲透。",
+      "conversion_examples": [
+        {
+          "source_concept": "机器学习中的梯度下降与优化器步长收敛",
+          "game_analogy_output": "FPS 压枪与灵敏度校准：每次看到弹孔偏高（误差 Loss），手就往反方向往下压一点（负梯度）；鼠标灵敏度调太高准星会上下乱飞过头（步长过大震荡），调得刚好才能稳稳锁在靶心。",
+          "boundary_limitation": "射击游戏压枪受固定弹道模式支配，而高维机器学习损失函数的鞍点与局部极小值空间要复杂得多。"
+        }
+      ]
+    },
+    {
+      "id": "GM-CIRC-024",
+      "term_zh": "缩圈与毒圈机制",
+      "term_en": "Safe Zone & Playzone Shrink",
+      "aliases": ["毒圈", "缩圈", "安全区", "跑毒", "电网"],
+      "genre": "FPS_BR",
+      "category": "spatial_and_vision",
+      "mechanic_definition": "随时间按固定阶段向特定圆心收缩的界外伤害区域，强制驱使所有幸存单位向愈发狭小的空间汇聚交战。",
+      "abstract_concept_mapping": ["收敛约束", "退火算法温度衰减", "边界压缩", "资源竞争加剧", "boundary shrinking"],
+      "real_life_analogy": "拍卖会现场加价倒数计时，留给买家的思考时间和决策区间随着时间流逝被极度压缩。",
+      "narrative_boundary_tip": "用安全边界收缩强制加快竞争收敛对应，严禁讲述吃鸡对局细节。",
+      "conversion_examples": [
+        {
+          "source_concept": "模拟退火算法随温度下降逐渐缩小解空间搜索范围",
+          "game_analogy_output": "毒圈收缩机制：初始阶段全地图广阔探索，随着圈子一级级收紧，系统淘汰边缘无效解，迫使所有算力迅速汇聚至核心最优区域进行决战。",
+          "boundary_limitation": "游戏缩圈是刚性空间几何收敛，多目标运筹优化在面对多峰值地形时收缩过快容易陷入局部最优陷阱。"
+        }
+      ]
+    },
+    {
+      "id": "GM-SUPPLY-025",
+      "term_zh": "人口卡上限与建筑时序",
+      "term_en": "Supply Block & Build Order",
+      "aliases": ["卡人口", "造房子", "建造时序", "运营流程", "人口上限"],
+      "genre": "STRATEGY_RTS",
+      "category": "resource_management",
+      "mechanic_definition": "单位生产受当前补给人口建筑总额硬约束，未提前造房会导致生产流水线全线停滞的运营瓶颈。",
+      "abstract_concept_mapping": ["容量规划", "资源瓶颈提前扩容", "流水线死锁", "基础设施前置", "capacity planning"],
+      "real_life_analogy": "工厂新订购了二十台重型机床运抵大门，才发现车间厂房还没盖好，机器只能堆在露天雨地里停工等待。",
+      "narrative_boundary_tip": "用前置储备不足导致后续生产管线停滞作比，直戳架构容量规划要害。",
+      "conversion_examples": [
+        {
+          "source_concept": "云原生微服务在新业务上线前的底层算力节点容量规划",
+          "game_analogy_output": "RTS卡人口与水晶塔：新业务代码即使写得再快，若没有提前扩容好底层的容器节点配额，生产指令一下达就会立即被人口红字硬卡死在队列中。",
+          "boundary_limitation": "现代公有云支持秒级自动弹性伸缩（Auto-scaling），而传统RTS建造需要耗费固定时间等待工兵施工完成。"
+        }
+      ]
+    }
+  ]
+}
