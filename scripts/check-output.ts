@@ -4,8 +4,8 @@
  *
  * `verdict` remains the mechanical gate: structure plus optional fact-term/ID
  * coverage. It is not a claim that the explanation is semantically correct or
- * that a reader understood the mechanism. Semantic quality and comprehension
- * are always reported as needing human or model review.
+ * that a reader understood the mechanism. Without HanLP, semantic quality
+ * is NEEDS_REVIEW; with HanLP, a readability label. Comprehension needs review.
  */
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -62,7 +62,7 @@ export interface FactLedger {
 }
 
 export type GateVerdict = "PASS" | "FAIL";
-export type ReviewVerdict = "NEEDS_REVIEW" | "HANLP_ASSISTED_PASS" | "HANLP_ASSISTED_WARN" | "HANLP_NEURAL_PASS" | "HANLP_NEURAL_WARN" | "LOCAL_HEURISTIC_PASS" | "LOCAL_HEURISTIC_WARN";
+export type ReviewVerdict = "NEEDS_REVIEW" | "HANLP_NEURAL_PASS" | "HANLP_NEURAL_WARN" | "LOCAL_HEURISTIC_PASS" | "LOCAL_HEURISTIC_WARN";
 export type ComprehensionVerdict = "NOT_REQUESTED" | "STRUCTURE_PRESENT_NEEDS_REVIEW";
 
 interface MappingRow {
@@ -1009,8 +1009,8 @@ function mappingRowsText(markdown: string): string {
 function reviewLabel(verdict: ReviewVerdict | ComprehensionVerdict): string {
   if (verdict === "NOT_REQUESTED") return "未请求（不能据此判断用户已理解）";
   if (verdict === "STRUCTURE_PRESENT_NEEDS_REVIEW") return "已见题目结构，需要人工或模型复核";
-  if (verdict === "HANLP_ASSISTED_PASS" || verdict === "HANLP_NEURAL_PASS") return "HanLP 依存分析可读性通过，仍需人工复核语义";
-  if (verdict === "HANLP_ASSISTED_WARN" || verdict === "HANLP_NEURAL_WARN") return "HanLP 依存分析发现拗口句或未铺垫术语，需要改稿";
+  if (verdict === "HANLP_NEURAL_PASS") return "HanLP 依存分析可读性通过，仍需人工复核语义";
+  if (verdict === "HANLP_NEURAL_WARN") return "HanLP 依存分析发现拗口句或未铺垫术语，需要改稿";
   if (verdict === "LOCAL_HEURISTIC_PASS") return "本地句法估算可读性通过，不是神经网络依存分析";
   if (verdict === "LOCAL_HEURISTIC_WARN") return "本地句法估算未过可读性线，不是神经网络依存分析";
   return "需要人工或模型复核";
@@ -1194,7 +1194,7 @@ function renderDirectoryScan(report: DirectoryScanReport): string {
 }
 
 function help(): void {
-  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n  bun run check-output -- result.md --fix --baseline-floor --strict-human-voice --emit-folded -\n  bun run check-output -- README.md --readme-review --emit-grammar-marked -\n  bun run check-output -- --scan-dir references\n\n选项：\n  -f, --file <路径>\n  --scan-dir <目录路径>          批量扫描项目目录下所有 Markdown 文件，输出文本识别评判汇总报告\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --author-profile <作家名或档位> 指定知名作家文体豁免档位（如 古龙/海明威/鲁迅/王小波 或 staccato_literary/dialectic_satire）\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用最低表达水平线（含文本识别评判）验收，未过线则总结论改为 FAIL\n  --text-judgment                启用文本识别评判门禁（readme表达审查 + 词句关键破解 + 类比真实度审查 + 语法识别），命中“ai生产”或语法错误则 FAIL\n  --readme-review                项目文件/README 审查模式：免除转换映射表要求，直接对文档执行文本识别评判门禁\n  --emit-grammar-marked <路径|-> 导出对主谓宾语序错误/英式倒装句/欧化句添加 Markdown 强调标记（**...**）后的全文\n  --fix                          落盘前去掉套话前缀、行首圆点、两三字指令短句，修正英式倒装与语序并合并过短段落\n  --chunk <k|all>                按二级标题逐块验收，任一块失败则总结论为 FAIL\n  --emit-folded <路径|->         校验通过后导出折叠呈现版（仅标题与干净正文，供直接交付读者）\n  --emit-annotated <路径|->      导出带追问内联标注的呈现版（格式：〔概念〕对应机制。适用边界。）\n  --emit-beginner-card <路径|->  导出面向零基础读者与低理解力人群的「小白一秒读懂卡」\n  --emit-gist <路径|->           导出切中观点的「极简白话与日常/游戏话术阐述报告」（适用于文言文、重复观点文章及快速抓主旨）\n  --habit <auto|gaming|daily|workplace> 指定导出话术映射时的用户习惯域（默认 auto）\n  --deterministic                人类可读输出收成一行；JSON 键序固定\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  文本识别评判          下辖 readme表达审查、词句关键破解、类比真实度审查（打“ai生产”标签）、外行复述锚点与语法识别（**强调标记**提取）\n  语义质量评估          本工具不能自动判定，固定为需要人工或模型复核\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
+  process.stdout.write(`转换结果校验（Bun/TypeScript）\n\n用法：\n  bun run check-output -- result.md --level default\n  bun run check-output -- result.md --level default --facts C:\\Temp\\fact-ledger.verified.json --style detective\n  bun run check-output -- result.md --fix --baseline-floor --strict-human-voice --emit-folded -\n  bun run check-output -- README.md --readme-review --emit-grammar-marked -\n  bun run check-output -- --scan-dir references\n\n选项：\n  -f, --file <路径>\n  --scan-dir <目录路径>          批量扫描项目目录下所有 Markdown 文件，输出文本识别评判汇总报告\n  --level <default|expand|long>\n  --facts <路径>        使用带页码锚点的事实清单；每条事实须含 id、claim、sourcePages 或 anchor\n  --strict-facts         未提供 --facts 时失败（PDF 验收应使用）\n  --style <表达风格>     断言文档元数据与预期风格一致\n  --author-profile <作家名或档位> 指定知名作家文体豁免档位（如 古龙/海明威/鲁迅/王小波 或 staccato_literary/dialectic_satire）\n  --json\n  --hanlp                        附加依存深度、未铺垫术语、语义相似度和人味诊断\n  --strict-human-voice           一行一句占比过高、非人名「·」达到 2 处，或人味分数低于 70 时，总结论改为 FAIL\n  --baseline-floor               用最低表达水平线（含文本识别评判）验收，未过线则总结论改为 FAIL\n  --text-judgment                启用文本识别评判门禁（readme表达审查 + 词句关键破解 + 类比真实度审查 + 语法识别），命中“ai生产”或语法错误则 FAIL\n  --readme-review                项目文件/README 审查模式：免除转换映射表要求，直接对文档执行文本识别评判门禁\n  --emit-grammar-marked <路径|-> 导出对主谓宾语序错误/英式倒装句/欧化句添加 Markdown 强调标记（**...**）后的全文\n  --fix                          落盘前去掉套话前缀、行首圆点、两三字指令短句，修正英式倒装与语序并合并过短段落\n  --chunk <k|all>                按二级标题逐块验收，任一块失败则总结论为 FAIL\n  --emit-folded <路径|->         校验通过后导出折叠呈现版（仅标题与干净正文，供直接交付读者）\n  --emit-annotated <路径|->      导出带追问内联标注的呈现版（格式：〔概念〕对应机制。适用边界。）\n  --emit-beginner-card <路径|->  导出面向零基础读者与低理解力人群的「小白一秒读懂卡」\n  --emit-gist <路径|->           导出切中观点的「极简白话与日常/游戏话术阐述报告」（适用于文言文、重复观点文章及快速抓主旨）\n  --habit <auto|gaming|daily|workplace> 指定导出话术映射时的用户习惯域（默认 auto）\n  --deterministic                人类可读输出收成一行；JSON 键序固定\n  --sts-threshold <0-1>\n  --max-dep-depth <number>\n  --hanlp-mode <auto|restful|native|local-fallback>\n  --hanlp-url <url>\n  --hanlp-auth <key>\n  --hanlp-lang <zh|mul|en>\n  --custom-dict <path>\n  --no-hanlp\n\n结论字段：\n  结构检查              映射表、校验段、篇幅、风格元数据、情况句泄漏\n  事实术语及 ID 覆盖    关键词/事实 ID 是否出现，不能证明机制正确\n  文本识别评判          下辖 readme表达审查、词句关键破解、类比真实度审查（打“ai生产”标签）、外行复述锚点与语法识别（**强调标记**提取）\n  语义质量评估          未启用 HanLP 时为需要人工或模型复核；启用后为可读性标签，仍不能证明语义正确\n  用户理解验证          无理解检验则为未请求；有题目也只确认结构存在\n\n兼容：现有 CLI 与 JSON 字段保持不变。verdict 仍是机械门禁，不是语义或理解合格证明。\n`);
 }
 
 function parseArgs(argv: string[]): { file?: string; scanDir?: string; level: OutputLevel; factsPath?: string; expectedStyle?: ExpressionStyle; authorProfile?: string; requireFacts: boolean; json: boolean; hanlp: HanLPOptions; stsThreshold?: number; maxDepDepth?: number; strictHumanVoice: boolean; enforceBaselineFloor: boolean; fix: boolean; chunk?: number | "all"; deterministic: boolean; emitFolded?: string; emitAnnotated?: string; emitBeginnerCard?: string; emitGist?: string; habit: UserHabitOption; textJudgment: boolean; readmeReview: boolean; emitGrammarMarked?: string } {

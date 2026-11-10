@@ -421,7 +421,6 @@ function isRunningHeaderOrBannerLine(line: string): boolean {
   if (singleLetterRatio > 0.6) return true;
   if (trimmed.length < 12) return true;
   if (/sci\.?\s*adv|science advances|research article|computer science|^\d+\s+of\s+\d+/iu.test(trimmed)) return true;
-  if (/^doshi and hauser/iu.test(trimmed)) return true;
   if (/\b(?:19|20)\d{2}\b/u.test(trimmed) && /\b(?:doi|vol\.|eadn\d+)/iu.test(trimmed)) return true;
   return false;
 }
