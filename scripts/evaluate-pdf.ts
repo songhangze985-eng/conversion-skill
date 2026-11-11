@@ -30,7 +30,6 @@ export interface PdfPositionedTextItem {
   x: number;
   y: number;
   width?: number;
-  hasEOL?: boolean;
 }
 
 export interface NavigationEntry {
@@ -283,17 +282,12 @@ function mergeLineItems(items: PdfPositionedTextItem[]): string[] {
   };
 
   for (const item of sorted) {
-    if (!item.str && !item.hasEOL) continue;
+    if (!item.str) continue;
     if (currentY !== null && Math.abs(item.y - currentY) > 2.8) {
       flush();
     }
-    if (item.str) {
-      currentItems.push(item);
-      if (currentY === null) currentY = item.y;
-    }
-    if (item.hasEOL && currentItems.length > 0 && currentItems.length > 8) {
-      // Preserve coordinate grouping over premature mid-column EOL flags
-    }
+    currentItems.push(item);
+    if (currentY === null) currentY = item.y;
   }
   flush();
   return lines;
@@ -310,7 +304,10 @@ export function sortPdfTextItemsTwoColumn(
   const classify = (it: PdfPositionedTextItem): "left" | "right" | "full" => {
     const estW = it.width !== undefined && it.width > 0 ? it.width : it.str.length * 4.8;
     const endX = it.x + estW;
-    if (it.x < midX - 14 && endX <= midX + 16) return "left";
+    // Relaxed from midX + 16: a left-column line may cross the gutter, but a run that
+    // reaches a third of the way into the right column, or is wider than 60% of the page, is full.
+    const spansBothColumns = endX > midX + pageWidth / 6 || estW > pageWidth * 0.6;
+    if (it.x < midX - 14 && !spansBothColumns) return "left";
     if (it.x >= midX - 12) return "right";
     return "full";
   };
@@ -342,8 +339,14 @@ export function sortPdfTextItemsTwoColumn(
     }
     const leftItems = seg.items.filter((it) => classify(it) === "left");
     const rightItems = seg.items.filter((it) => classify(it) === "right");
+    const continuesLine = (right: PdfPositionedTextItem): boolean => leftItems.some((left) => {
+      if (Math.abs(left.y - right.y) > 2.8) return false;
+      const estW = left.width !== undefined && left.width > 0 ? left.width : left.str.length * 4.8;
+      const gap = right.x - (left.x + estW);
+      return gap >= -1.5 && gap <= 6;
+    });
     const leftLines = mergeLineItems(leftItems);
-    const rightLines = mergeLineItems(rightItems);
+    const rightLines = mergeLineItems(rightItems.filter((right) => !continuesLine(right)));
     if (leftLines.length >= 2 && rightLines.length >= 2) {
       detectedTwoColumn = true;
       outputLines.push(...leftLines, ...rightLines);
@@ -384,7 +387,6 @@ async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageC
         x,
         y,
         width,
-        hasEOL: Boolean(item.hasEOL),
       });
     }
 
