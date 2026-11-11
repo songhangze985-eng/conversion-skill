@@ -369,6 +369,7 @@ export interface ClassicalTranslationResult {
 }
 
 export interface KeywordScreeningReport {
+  source_text: string;
   discourse_mode: DiscourseMode;
   detected_user_habit: UserHabit;
   narrative_boundary: NarrativeBoundarySpec;
@@ -936,10 +937,7 @@ function polysemyGlossOverride(
 function finishGaiYiPurposeClause(clause: string): string {
   const finished = clause.replace(
     /究其根源，是因为以([^，。！？；：\n]{1,12})/gu,
-    (_match, purpose: string) => {
-      const spoken = purpose === "诱敌" ? "引诱敌人" : purpose;
-      return `究其根源，是为了${spoken}`;
-    },
+    "究其根源，是为了$1",
   );
   return finished.replace(/([^\s，。！？；：\n])(究其根源，是为了)/gu, "$1，$2");
 }
@@ -1475,6 +1473,7 @@ export function screenThesisKeywords(
     : undefined;
 
   return {
+    source_text: text,
     discourse_mode,
     detected_user_habit: selected_game_query ? "gaming" : detected_user_habit,
     narrative_boundary,
@@ -1560,9 +1559,10 @@ export function renderKeywordScreeningMarkdown(report: KeywordScreeningReport): 
   } else if (report.selected_author_query) {
     lines.push("", report.selected_author_query.stage3_direct_output);
   } else {
-    const followupSource = (report.classical_translation?.sentence_by_sentence ?? [])
+    const reconstructedClassical = (report.classical_translation?.sentence_by_sentence ?? [])
       .map((sentence) => sentence.classical)
       .join("");
+    const followupSource = reconstructedClassical.trim() || report.source_text;
     lines.push("", "> 过程已省略", `> ${buildContextAwareFollowupPrompt(followupSource)}`);
   }
 

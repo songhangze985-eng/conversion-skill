@@ -82,4 +82,15 @@ describe("screen-keywords & classical-chinese-kb", () => {
     expect(md).toContain("# 切中观点·极简白话与话术映射报告");
     expect(md).toContain("游戏玩家常用话术");
   });
+
+  test("假寐 polysemy overrides the blanket gloss for 假 and the markdown follow-up is context-aware", () => {
+    const sentence = "乃悟前狼假寐，盖以诱敌。";
+    const report = screenThesisKeywords(sentence);
+    const jia = report.thesis_keywords.find((item) => item.keyword === "假");
+    expect(jia?.gloss).toBe("假装");
+    expect(jia?.gloss ?? "").not.toContain("借用");
+    expect(report.pithy_vernacular_summary).not.toContain("是因为以");
+    const md = renderKeywordScreeningMarkdown(report);
+    expect(md).not.toContain("王者荣耀");
+  });
 });
