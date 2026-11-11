@@ -254,6 +254,8 @@ const AI_README_STANDARDIZED_PHRASES = [
 ];
 
 const EMOJI_REGEX = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2705}\u{274C}\u{26A1}\u{2728}]/gu;
+// 全局正则的 lastIndex 会让后面的标题或列表行漏判表情。
+const EMOJI_LINE_REGEX = new RegExp(EMOJI_REGEX.source, "u");
 
 const STOPWORDS_EN = new Set([
   "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -388,7 +390,7 @@ export function evaluateReadmeExpression(rawMarkdown: string): ReadmeExpressionR
 
   const lines = withoutCode.split(/\r?\n/);
   const headingOrBulletEmojis = lines.filter(
-    (line) => /^(?:#{1,6}\s+|[-*+•]\s+|\d+[.)、]\s+)/u.test(line.trim()) && EMOJI_REGEX.test(line)
+    (line) => /^(?:#{1,6}\s+|[-*+•]\s+|\d+[.)、]\s+)/u.test(line.trim()) && EMOJI_LINE_REGEX.test(line)
   ).length;
   const emoji_overuse = emoji_count >= 3 || headingOrBulletEmojis >= 2;
 

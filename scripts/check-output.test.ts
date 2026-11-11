@@ -183,6 +183,13 @@ describe("check-output mechanical gates", () => {
     expect(r1.label).toBe("ai生产");
     expect(r1.emoji_overuse).toBe(true);
 
+    const twoHeadingEmojis = "# 🚀 极速引擎\n\n## ✨ 核心特性\n\n正文没有别的表情。\n";
+    const rHeadings = evaluateReadmeExpression(twoHeadingEmojis);
+    expect(rHeadings.emoji_count).toBe(2);
+    expect(rHeadings.emoji_overuse).toBe(true);
+    expect(rHeadings.is_ai_produced).toBe(true);
+    expect(rHeadings.label).toBe("ai生产");
+
     const fragStdReadme = [
       "# 极速引擎",
       "",
