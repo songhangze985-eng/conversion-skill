@@ -30,7 +30,6 @@ export interface PdfPositionedTextItem {
   x: number;
   y: number;
   width?: number;
-  hasEOL?: boolean;
 }
 
 export interface NavigationEntry {
@@ -283,17 +282,12 @@ function mergeLineItems(items: PdfPositionedTextItem[]): string[] {
   };
 
   for (const item of sorted) {
-    if (!item.str && !item.hasEOL) continue;
+    if (!item.str) continue;
     if (currentY !== null && Math.abs(item.y - currentY) > 2.8) {
       flush();
     }
-    if (item.str) {
-      currentItems.push(item);
-      if (currentY === null) currentY = item.y;
-    }
-    if (item.hasEOL && currentItems.length > 0 && currentItems.length > 8) {
-      // Preserve coordinate grouping over premature mid-column EOL flags
-    }
+    currentItems.push(item);
+    if (currentY === null) currentY = item.y;
   }
   flush();
   return lines;
@@ -308,9 +302,7 @@ export function sortPdfTextItemsTwoColumn(
 
   const midX = pageWidth / 2;
   const classify = (it: PdfPositionedTextItem): "left" | "right" | "full" => {
-    const estW = it.width !== undefined && it.width > 0 ? it.width : it.str.length * 4.8;
-    const endX = it.x + estW;
-    if (it.x < midX - 14 && endX <= midX + 16) return "left";
+    if (it.x < midX - 14) return "left";
     if (it.x >= midX - 12) return "right";
     return "full";
   };
@@ -346,10 +338,8 @@ export function sortPdfTextItemsTwoColumn(
     const rightLines = mergeLineItems(rightItems);
     if (leftLines.length >= 2 && rightLines.length >= 2) {
       detectedTwoColumn = true;
-      outputLines.push(...leftLines, ...rightLines);
-    } else {
-      outputLines.push(...mergeLineItems(seg.items));
     }
+    outputLines.push(...leftLines, ...rightLines);
   }
 
   return {
@@ -384,7 +374,6 @@ async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageC
         x,
         y,
         width,
-        hasEOL: Boolean(item.hasEOL),
       });
     }
 

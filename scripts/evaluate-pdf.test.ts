@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildNavigation, draftLedger, extractPaperArtifacts, type PageText } from "./evaluate-pdf";
+import { buildNavigation, draftLedger, extractPaperArtifacts, sortPdfTextItemsTwoColumn, type PageText } from "./evaluate-pdf";
 
 describe("evaluate-pdf layout & artifact navigation", () => {
   const samplePages: PageText[] = [
@@ -59,5 +59,37 @@ describe("evaluate-pdf layout & artifact navigation", () => {
 
     const ledger = draftLedger("paper.pdf", buildNavigation(samplePages), artifacts);
     expect(Array.isArray(ledger.structured_artifacts)).toBe(true);
+  });
+
+  test("keeps a wide left-column line in column order instead of gluing across the gutter", () => {
+    const page = (leftWidth: number) => [
+      { str: "Left column opens with a short sentence.", x: 72, y: 700, width: leftWidth },
+      { str: "Right column opens with another sentence.", x: 320, y: 700, width: 220 },
+      { str: "Left column continues on the next line.", x: 72, y: 680, width: 230 },
+      { str: "Right column continues on the next line.", x: 320, y: 680, width: 220 },
+    ];
+    const expected = [
+      "Left column opens with a short sentence.",
+      "Left column continues on the next line.",
+      "Right column opens with another sentence.",
+      "Right column continues on the next line.",
+    ];
+
+    const narrow = sortPdfTextItemsTwoColumn(page(230), 612);
+    expect(narrow.layoutMode).toBe("two-column");
+    expect(narrow.lines).toEqual(expected);
+
+    const wide = sortPdfTextItemsTwoColumn(page(255), 612);
+    expect(wide.layoutMode).toBe("two-column");
+    expect(wide.lines).toEqual(expected);
+
+    const sparse = sortPdfTextItemsTwoColumn(
+      [
+        { str: "Alpha stays on the left.", x: 72, y: 500, width: 200 },
+        { str: "Beta stays on the right.", x: 340, y: 500, width: 180 },
+      ],
+      612,
+    );
+    expect(sparse.lines).toEqual(["Alpha stays on the left.", "Beta stays on the right."]);
   });
 });
