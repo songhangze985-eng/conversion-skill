@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.0 — 2026-11-11
+
+- 版本升至 `3.0.0`。`SKILL.md` 改为渐进披露，多轮范例移到 `references/interactive-pipeline-examples.md`。未指定文体时默认 `neutral`；点名深度叙事时才启用故事载体（可指定 `anime` 等皮肤，扭曲机制则回退 `neutral`）。
+- 新增单次管线 `scripts/pipeline.ts`（`bun run pipeline`，含 `--bundle-web`）。
+- 新增 `gaming-kb.json`（12 款游戏）、`life-memes-kb.json`、`story-authors-kb.json`（19 位作家），并扩充 `classical-chinese-kb.json` 的一词多义消歧（假、绝、信、兵、走、去）。
+- 门禁按作家档位放宽：`--author-profile 古龙/海明威/契诃夫` 豁免段落下限，`鲁迅/王小波/刘震云` 豁免合理反讽对照。`evaluate-pdf` 增加双栏坐标阅读序。
+
 ## 2.5.0 — 2026-11-07
 
 - 新增**叙述边界设定、自建文言文翻译 JSON 知识库与切中观点的关键词筛选工具**（`references/narrative-boundary-and-gist.md`、`assets/knowledge/classical-chinese-kb.json`、`scripts/screen-keywords.ts`）：
