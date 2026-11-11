@@ -369,6 +369,7 @@ export interface ClassicalTranslationResult {
 }
 
 export interface KeywordScreeningReport {
+  source_text: string;
   discourse_mode: DiscourseMode;
   detected_user_habit: UserHabit;
   narrative_boundary: NarrativeBoundarySpec;
@@ -917,6 +918,30 @@ export function resolveClassicalPolysemy(
   return hits;
 }
 
+function primaryPolysemyReading(hit: PolysemyResolutionHit): string {
+  const noted = hit.note.match(/意为[『「]([^』」]+)[』」]/u);
+  if (noted?.[1]) return noted[1];
+  const head = hit.sense_label.split(/[/／]/u)[0]?.trim();
+  return head || hit.sense_label;
+}
+
+function polysemyGlossOverride(
+  word: string,
+  hits: PolysemyResolutionHit[] | undefined,
+): string | undefined {
+  const matched = (hits ?? []).filter((hit) => hit.char === word);
+  if (matched.length === 0) return undefined;
+  return [...new Set(matched.map(primaryPolysemyReading))].join(" / ");
+}
+
+function finishGaiYiPurposeClause(clause: string): string {
+  const finished = clause.replace(
+    /究其根源，是因为以([^，。！？；：\n]{1,12})/gu,
+    "究其根源，是为了$1",
+  );
+  return finished.replace(/([^\s，。！？；：\n])(究其根源，是为了)/gu, "$1，$2");
+}
+
 function translateClassicalClauseByRules(
   clause: string,
   kb: ClassicalChineseKnowledgeBase,
@@ -924,7 +949,7 @@ function translateClassicalClauseByRules(
   let out = clause.trim();
   if (!out) return out;
 
-  // 0. Context-sensitive polysemy disambiguation FIRST (prevents blind single-meaning overwrite)
+  // 0. Context-matched phrase swaps, before blanket lexical substitution.
   for (const item of kb.polysemy_disambiguation ?? []) {
     for (const sense of item.senses) {
       try {
@@ -961,6 +986,9 @@ function translateClassicalClauseByRules(
       // ignore invalid regex
     }
   }
+
+  // P14 keeps instrumental 以 inside $1 (盖以诱敌 → 是因为以诱敌). Finish that one clause.
+  out = finishGaiYiPurposeClause(out);
 
   // 3. Apply common single-char classical function/content fallbacks
   const singleCharReplacements: Array<[RegExp, string]> = [
@@ -1319,11 +1347,12 @@ export function screenThesisKeywords(
     for (const gloss of classical_translation.matched_lexical_glosses) {
       if (!candidateScores.has(gloss.word)) {
         const anchorSent = sentences.find((s) => s.includes(gloss.word)) ?? sentences[0] ?? text;
+        const override = polysemyGlossOverride(gloss.word, classical_translation.polysemy_disambiguations);
         candidateScores.set(gloss.word, {
           freq: Math.max(1, (text.match(new RegExp(gloss.word, "gu")) ?? []).length),
           score: gloss.is_false_friend ? 0.88 : 0.82,
           bestSentence: anchorSent,
-          gloss: `${gloss.pithy_vernacular}（${gloss.classical_meaning}）`,
+          gloss: override ?? `${gloss.pithy_vernacular}（${gloss.classical_meaning}）`,
         });
       }
     }
@@ -1444,6 +1473,7 @@ export function screenThesisKeywords(
     : undefined;
 
   return {
+    source_text: text,
     discourse_mode,
     detected_user_habit: selected_game_query ? "gaming" : detected_user_habit,
     narrative_boundary,
@@ -1503,7 +1533,10 @@ export function renderKeywordScreeningMarkdown(report: KeywordScreeningReport): 
     if (falseFriends.length > 0) {
       lines.push("- **古今异义防坑预警**：");
       for (const ff of falseFriends) {
-        lines.push(`  - 「**${ff.word}**」：今译为「**${ff.pithy_vernacular}**」（${ff.trap_note}）`);
+        const hits = (ct.polysemy_disambiguations ?? []).filter((hit) => hit.char === ff.word);
+        const reading = polysemyGlossOverride(ff.word, hits) ?? ff.pithy_vernacular;
+        const note = hits.length === 1 ? hits[0]!.note : ff.trap_note;
+        lines.push(`  - 「**${ff.word}**」：今译为「**${reading}**」（${note}）`);
       }
     }
     if (ct.matched_particles.length > 0) {
@@ -1526,7 +1559,11 @@ export function renderKeywordScreeningMarkdown(report: KeywordScreeningReport): 
   } else if (report.selected_author_query) {
     lines.push("", report.selected_author_query.stage3_direct_output);
   } else {
-    lines.push("", "> 过程已省略", "> 你可以试试说：用【王者荣耀】的理解方式打开");
+    const reconstructedClassical = (report.classical_translation?.sentence_by_sentence ?? [])
+      .map((sentence) => sentence.classical)
+      .join("");
+    const followupSource = reconstructedClassical.trim() || report.source_text;
+    lines.push("", "> 过程已省略", `> ${buildContextAwareFollowupPrompt(followupSource)}`);
   }
 
   lines.push("", "## 叙述边界铁律");
