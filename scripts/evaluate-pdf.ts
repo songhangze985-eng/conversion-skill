@@ -302,7 +302,12 @@ export function sortPdfTextItemsTwoColumn(
 
   const midX = pageWidth / 2;
   const classify = (it: PdfPositionedTextItem): "left" | "right" | "full" => {
-    if (it.x < midX - 14) return "left";
+    const estW = it.width !== undefined && it.width > 0 ? it.width : it.str.length * 4.8;
+    const endX = it.x + estW;
+    // Relaxed from midX + 16: a left-column line may cross the gutter, but a run that
+    // reaches a third of the way into the right column, or is wider than 60% of the page, is full.
+    const spansBothColumns = endX > midX + pageWidth / 6 || estW > pageWidth * 0.6;
+    if (it.x < midX - 14 && !spansBothColumns) return "left";
     if (it.x >= midX - 12) return "right";
     return "full";
   };
@@ -334,12 +339,20 @@ export function sortPdfTextItemsTwoColumn(
     }
     const leftItems = seg.items.filter((it) => classify(it) === "left");
     const rightItems = seg.items.filter((it) => classify(it) === "right");
+    const continuesLine = (right: PdfPositionedTextItem): boolean => leftItems.some((left) => {
+      if (Math.abs(left.y - right.y) > 2.8) return false;
+      const estW = left.width !== undefined && left.width > 0 ? left.width : left.str.length * 4.8;
+      const gap = right.x - (left.x + estW);
+      return gap >= -1.5 && gap <= 6;
+    });
     const leftLines = mergeLineItems(leftItems);
-    const rightLines = mergeLineItems(rightItems);
+    const rightLines = mergeLineItems(rightItems.filter((right) => !continuesLine(right)));
     if (leftLines.length >= 2 && rightLines.length >= 2) {
       detectedTwoColumn = true;
+      outputLines.push(...leftLines, ...rightLines);
+    } else {
+      outputLines.push(...mergeLineItems(seg.items));
     }
-    outputLines.push(...leftLines, ...rightLines);
   }
 
   return {
