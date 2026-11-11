@@ -238,6 +238,30 @@ describe("check-output mechanical gates", () => {
     expect(full.labels).toContain("语法待修正");
   });
 
+  test("text recognition judgment: --fix leaves non-instrument 把/将 and 的-stacking notes unchanged", () => {
+    const manual = "编辑把用户使用手册寄出。";
+    const launch = "项目将于下周通过评审完成上线。";
+    expect(normalizeOutputMarkdown(manual)).toBe(manual);
+    expect(normalizeOutputMarkdown(launch)).toBe(launch);
+    expect(evaluateGrammarInspection(manual).issues.some((issue) => issue.pattern_name === "object_before_instrument_adverbial")).toBe(false);
+    expect(evaluateGrammarInspection(launch).issues.some((issue) => issue.pattern_name === "object_before_instrument_adverbial")).toBe(false);
+
+    const genuine = "调音师把输入矩阵通过正交变换拆分。";
+    expect(normalizeOutputMarkdown(genuine)).toContain("调音师通过正交变换把输入矩阵拆分");
+    const byMail = "编辑把文件通过邮件寄出。";
+    expect(normalizeOutputMarkdown(byMail)).toContain("编辑通过邮件把文件寄出");
+    const disposalJiang = "技师将输入矩阵通过正交变换拆分。";
+    expect(normalizeOutputMarkdown(disposalJiang)).toContain("技师通过正交变换将输入矩阵拆分");
+
+    const stacked = "系统读取着在每次迭代的反向传播的过程中被优化器更新的权重参数。";
+    const stackedFixed = normalizeOutputMarkdown(stacked);
+    expect(stackedFixed).toContain("系统读取着在每次迭代的反向传播的过程中被优化器更新的权重参数");
+    expect(stackedFixed).not.toContain("请拆分为动宾短句");
+    expect(evaluateGrammarInspection(stacked).issues.find((issue) => issue.kind === "anglicized_de_stacking")?.suggestion).toBe(
+      "请拆分为动宾短句或后置说明，避免多层「的」字包孕定语。",
+    );
+  });
+
   test("text recognition judgment extensions: rhetorical shells, negative parallelism, sticker analogies, Europeanized syntax, retelling anchor, and directory scan", () => {
     const rhetSample = "你可能会问：为什么要分区？这不是一次折中，而是一场蜕变；它的关键不在于硬件，而在于协议。这就是共识算法的魅力所在！";
     const m = evaluateMicroSentenceCracker(rhetSample);

@@ -851,6 +851,24 @@ function buildHanlpReport(
   };
 }
 
+function suggestionIsReplacement(sentence: string, suggestion: string): boolean {
+  const chars = (value: string) => [...value].filter((ch) => /[\u4e00-\u9fffA-Za-z0-9]/u.test(ch));
+  const source = chars(sentence);
+  const rewritten = chars(suggestion);
+  if (source.length === 0 || rewritten.length === 0) return false;
+  const counts = new Map<string, number>();
+  for (const ch of source) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+  let shared = 0;
+  for (const ch of rewritten) {
+    const left = counts.get(ch) ?? 0;
+    if (left <= 0) continue;
+    counts.set(ch, left - 1);
+    shared += 1;
+  }
+  // A replacement reuses the sentence. An editor note such as 「请拆分为…」 does not.
+  return shared / Math.max(source.length, rewritten.length) >= 0.5;
+}
+
 export function normalizeOutputMarkdown(markdown: string): string {
   let text = markdown.replace(/\r\n/g, "\n").replace(/\u00ad/g, "");
   const clicheReplacements: Array<[RegExp, string]> = [
@@ -861,7 +879,7 @@ export function normalizeOutputMarkdown(markdown: string): string {
   for (const [pattern, replacement] of clicheReplacements) text = text.replace(pattern, replacement);
   const grammar = evaluateGrammarInspection(text);
   for (const issue of grammar.issues) {
-    if (issue.suggestion && text.includes(issue.sentence)) {
+    if (issue.suggestion && text.includes(issue.sentence) && suggestionIsReplacement(issue.sentence, issue.suggestion)) {
       text = text.split(issue.sentence).join(issue.suggestion);
     }
   }
