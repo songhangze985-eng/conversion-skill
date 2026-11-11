@@ -67,6 +67,25 @@ describe("v3.0 Eight-Point Third-Party Critique Remediations", () => {
     expect(authorRoute.default_routing.mode).toBe("author_or_story_narrative");
   });
 
+  test("refusal actions route to the fixed line and emit no concept gist", () => {
+    const lengthRoute = runUnifiedPipeline({ inputText: "请把快速排序写成一万字长篇连载" });
+    expect(lengthRoute.input_analysis.recommend_action).toBe("refuse_length");
+    expect(lengthRoute.default_routing.mode).toBe("refuse_length");
+    expect(lengthRoute.one_shot_fast_value.pithy_gist).toBe("这么多！是让我写水文吗");
+    expect(lengthRoute.keyword_screening).toBeUndefined();
+
+    const unreadableRoute = runUnifiedPipeline({ inputText: "这篇扫描件模糊，文本层损坏，关键页也看不清" });
+    expect(unreadableRoute.input_analysis.recommend_action).toBe("refuse_unreadable");
+    expect(unreadableRoute.default_routing.mode).toBe("refuse_unreadable");
+    expect(unreadableRoute.one_shot_fast_value.pithy_gist).toBe("没有稿费我可不写");
+    expect(unreadableRoute.keyword_screening).toBeUndefined();
+
+    const classicalFormula = runUnifiedPipeline({ inputText: "君子曰：学不可以已。P(A|B)=P(B|A)P(A)/P(B)" });
+    expect(classicalFormula.default_routing.mode).toBe("neutral_direct_gist");
+    expect(classicalFormula.input_analysis.recommend_action).toBe("explain_formula_first");
+    expect(classicalFormula.one_shot_fast_value.pithy_gist).toContain("学习一辈子不能停");
+  });
+
   test("R4a (Eliminate Silent Fallback Spoofing & Static Specimen Trap): Unmatched author/game/meme returns matched=false, preserves user entity, and emits target_concept_slots", () => {
     const murakami = queryAuthorStyleByName("村上春树", "CAP定理中的一致性与可用性权衡");
     expect(murakami.matched).toBe(false);
