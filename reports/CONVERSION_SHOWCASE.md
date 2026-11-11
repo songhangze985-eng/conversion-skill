@@ -1,3 +1,5 @@
+> 快照：本文写于 v3.0 之前，未按 3.0.0 重写。
+
 # conversion-skill 核心转换能力效果展示全景手册 (CONVERSION SHOWCASE)
 
 > **核心转译原则**:  

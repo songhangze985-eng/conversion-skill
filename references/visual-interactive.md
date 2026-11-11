@@ -10,7 +10,7 @@
 
 ## 模式一：同构 Mermaid 图表规范
 
-仅使用受支持的 표준 Mermaid 语法（`flowchart TD/LR`、`sequenceDiagram`、`stateDiagram-v2`、`xychart-beta`），严禁在节点标签内使用 `<br>` 等 HTML 标签（`check-output` 的 `validateMermaidBlocks` 会拦截含 HTML 标签或非法声明的图表）。
+仅使用受支持的标准 Mermaid 语法（`flowchart TD/LR`、`sequenceDiagram`、`stateDiagram-v2`、`xychart-beta`），严禁在节点标签内使用 `<br>` 等 HTML 标签（`check-output` 的 `validateMermaidBlocks` 会拦截含 HTML 标签或非法声明的图表）。
 
 ### 适用题型与图种映射
 
