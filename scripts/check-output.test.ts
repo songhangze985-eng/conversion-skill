@@ -305,4 +305,42 @@ describe("check-output mechanical gates", () => {
     expect(gist).toContain("弊在赂秦");
     expect(gist).toContain("游戏玩家常用话术");
   });
+
+  test("stdout emit flags keep the mechanical exit status", async () => {
+    const script = resolve(import.meta.dir, "check-output.ts");
+    const fail = resolve(fixtures, "fail-no-mapping.md");
+    const pass = resolve(fixtures, "ok-three-col.md");
+    const run = async (args: string[]) => {
+      const child = Bun.spawn([process.execPath, script, ...args], { stdout: "pipe", stderr: "pipe" });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { stdout, stderr, code };
+    };
+
+    const bare = await run([fail]);
+    expect(bare.code).toBe(1);
+    expect(bare.stdout).toContain("转换结果校验");
+
+    const markers = [
+      ["--emit-beginner-card", "小白一秒读懂卡"],
+      ["--emit-gist", "切中观点·极简白话与话术映射报告"],
+      ["--emit-grammar-marked", "没有任何映射表"],
+    ] as const;
+    for (const [flag, marker] of markers) {
+      const emitted = await run([fail, flag, "-"]);
+      expect(emitted.code).toBe(1);
+      expect(emitted.stderr).toBe("");
+      expect(emitted.stdout).toContain(marker);
+      expect(emitted.stdout).not.toContain("转换结果校验");
+    }
+
+    const passing = await run([pass, "--style", "anime", "--emit-beginner-card", "-"]);
+    expect(passing.code).toBe(0);
+    expect(passing.stderr).toBe("");
+    expect(passing.stdout).toContain("小白一秒读懂卡");
+    expect(passing.stdout).not.toContain("转换结果校验");
+  });
 });
