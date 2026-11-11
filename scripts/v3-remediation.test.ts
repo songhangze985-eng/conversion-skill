@@ -158,6 +158,76 @@ describe("v3.0 Eight-Point Third-Party Critique Remediations", () => {
     expect(passGulong.verdict).toBe("PASS");
   });
 
+  test("bare author mentions do not waive the expression baseline", () => {
+    const manuscript = (opening: string) => `# 窄巷死锁
+
+> 表达风格：\`narrative\`
+> 篇幅：\`default\`
+
+| 知识概念 | 类比元素 | 对应机制 | 适用边界 |
+|---|---|---|---|
+| 互斥条件 | 独扇铁门 | 同一时刻只容一人握住门闩通过 | 铁门是空间排他，软件锁还有切换开销 |
+| 持有并等待 | 攥住门闩 | 手里扣住门闩不放，同时伸手讨要铜钥 | 人会体力不支松手，线程无超时会永久阻塞 |
+| 循环等待 | 两人对峙 | 甲等乙交出铜钥，乙等甲让出门闩 | 真实死锁环可能跨越数十个服务节点 |
+
+## 正文
+
+${opening}窄巷里很冷，铁门同一时刻只容一人通过。
+
+张聋子扣住了门闩，眼睛却盯着对方腰间铜钥。
+
+李瞎子按住铜钥，除非对方先把门闩让开半步。
+
+## 知识点校验
+
+死锁在互斥条件、持有并等待与循环等待同时成立时触发；只要破坏其中任意一环，阻塞闭环最终即告解除并恢复通行。
+`;
+    const gate = (markdown: string, authorProfile?: string) =>
+      analyzeMarkdown(markdown, {
+        level: "default",
+        enforceBaselineFloor: true,
+        ...(authorProfile ? { authorProfile } : {}),
+      });
+
+    const plain = gate(manuscript(""));
+    expect(plain.verdict).toBe("FAIL");
+    expect(plain.expression_baseline_verdict).toBe("FAIL");
+    expect(plain.hanlp_report?.human_voice_diagnostics.humanVoiceScore).toBe(66);
+
+    const bare = gate(manuscript("海明威喜欢短句。"));
+    expect(bare.verdict).toBe("FAIL");
+    expect(bare.expression_baseline_verdict).toBe("FAIL");
+    expect(bare.hanlp_report?.human_voice_diagnostics.humanVoiceScore).not.toBe(100);
+    expect(bare.expression_baseline_report?.violations.some((item) => item.includes("一行一句"))).toBe(true);
+
+    const flagged = gate(manuscript(""), "海明威");
+    expect(flagged.verdict).toBe("PASS");
+    expect(flagged.expression_baseline_verdict).toBe("PASS");
+    expect(flagged.hanlp_report?.human_voice_diagnostics.humanVoiceScore).toBe(100);
+
+    for (const opening of ["作家风格：海明威。", "仿真【海明威】"]) {
+      const marked = gate(manuscript(opening));
+      expect(marked.verdict).toBe("PASS");
+      expect(marked.expression_baseline_verdict).toBe("PASS");
+      expect(marked.hanlp_report?.human_voice_diagnostics.humanVoiceScore).toBe(100);
+    }
+
+    const bareMention = "海明威喜欢短句。鲁迅说过。Hemingway wrote it. This verse is prose.";
+    expect(resolveAuthorGateProfile("narrative", bareMention)).toBe("standard");
+    expect(resolveAuthorGateProfile(undefined, bareMention)).toBe("standard");
+    expect(resolveAuthorGateProfile("verse", "普通正文，没有标记。")).toBe("staccato_literary");
+    expect(resolveAuthorGateProfile("海明威")).toBe("staccato_literary");
+    expect(resolveAuthorGateProfile("hemingway")).toBe("staccato_literary");
+    expect(resolveAuthorGateProfile("gu long")).toBe("staccato_literary");
+    expect(resolveAuthorGateProfile("鲁迅")).toBe("dialectic_satire");
+    expect(resolveAuthorGateProfile("wang xiaobo")).toBe("dialectic_satire");
+    expect(resolveAuthorGateProfile("鲁迅", bareMention)).toBe("dialectic_satire");
+    expect(resolveAuthorGateProfile(undefined, "> 作家风格：`海明威`")).toBe("staccato_literary");
+    expect(resolveAuthorGateProfile(undefined, "作家风格:契诃夫")).toBe("staccato_literary");
+    expect(resolveAuthorGateProfile(undefined, "仿真【鲁迅】")).toBe("dialectic_satire");
+    expect(resolveAuthorGateProfile(undefined, "作家风格：刘震云")).toBe("dialectic_satire");
+  });
+
   test("R7 (Academic PDF Two-Column Coordinate Sorting, Ligature/Math Repair & Custom Method Section Fallback)", () => {
     const interleavedStream = [
       { str: "Attention Is All You Need", x: 140, y: 745, width: 330 },
