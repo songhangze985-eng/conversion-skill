@@ -456,18 +456,19 @@ export function resolveAuthorGateProfile(
   authorOrStyle?: string | null,
   rawMarkdown = "",
 ): AuthorGateProfile {
-  const combined = `${authorOrStyle ?? ""}\n${rawMarkdown.slice(0, 600)}`.toLocaleLowerCase();
+  // The flag, style argument, and author-profile string may name the writer directly.
+  // Manuscript text waives only through an explicit 作家风格： or 仿真【】 marker.
+  const profileSource = authorOrStyle ?? "";
+  const markerSource = rawMarkdown.slice(0, 600);
   if (
-    /古龙|gu\s*long|gulong|海明威|hemingway|契诃夫|chekhov|staccato_literary|\bverse\b|作家风格[：:]\s*`?(?:古龙|海明威|契诃夫)|仿真【(?:古龙|海明威|契诃夫)】/iu.test(
-      combined,
-    )
+    /古龙|gu\s*long|gulong|海明威|hemingway|契诃夫|chekhov|staccato_literary|\bverse\b/iu.test(profileSource) ||
+    /作家风格[：:]\s*`?(?:古龙|海明威|契诃夫)|仿真【(?:古龙|海明威|契诃夫)】/iu.test(markerSource)
   ) {
     return "staccato_literary";
   }
   if (
-    /鲁迅|lu\s*xun|luxun|王小波|wang\s*xiaobo|刘震云|liu\s*zhenyun|dialectic_satire|作家风格[：:]\s*`?(?:鲁迅|王小波|刘震云)|仿真【(?:鲁迅|王小波|刘震云)】/iu.test(
-      combined,
-    )
+    /鲁迅|lu\s*xun|luxun|王小波|wang\s*xiaobo|刘震云|liu\s*zhenyun|dialectic_satire/iu.test(profileSource) ||
+    /作家风格[：:]\s*`?(?:鲁迅|王小波|刘震云)|仿真【(?:鲁迅|王小波|刘震云)】/iu.test(markerSource)
   ) {
     return "dialectic_satire";
   }
