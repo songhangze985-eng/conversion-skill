@@ -1414,11 +1414,12 @@ if (import.meta.main) {
       textJudgment: args.textJudgment,
       readmeReview: args.readmeReview,
     });
+    const exitCode = result.verdict === "PASS" ? 0 : 1;
     if (args.emitGrammarMarked && result.text_recognition_judgment) {
       const marked = result.text_recognition_judgment.grammar_inspection.annotated_markdown;
       if (args.emitGrammarMarked === "-") {
         process.stdout.write(marked.endsWith("\n") ? marked : `${marked}\n`);
-        process.exit(0);
+        process.exit(exitCode);
       }
       writeFileSync(resolve(args.emitGrammarMarked), marked.endsWith("\n") ? marked : `${marked}\n`, "utf8");
     }
@@ -1442,7 +1443,7 @@ if (import.meta.main) {
       const card = projectBeginnerCard(markdown);
       if (args.emitBeginnerCard === "-") {
         process.stdout.write(card);
-        process.exit(0);
+        process.exit(exitCode);
       }
       writeFileSync(resolve(args.emitBeginnerCard), card, "utf8");
     }
@@ -1450,13 +1451,13 @@ if (import.meta.main) {
       const gist = projectConciseGist(markdown, args.habit);
       if (args.emitGist === "-") {
         process.stdout.write(gist);
-        process.exit(0);
+        process.exit(exitCode);
       }
       writeFileSync(resolve(args.emitGist), gist, "utf8");
     }
     if (args.json) process.stdout.write(args.deterministic ? stableJson(result) : `${JSON.stringify(result, null, 2)}\n`);
     else process.stdout.write(`${args.deterministic ? renderDeterministic(result) : render(result)}\n`);
-    process.exit(result.verdict === "PASS" ? 0 : 1);
+    process.exit(exitCode);
   };
   run().catch((error: unknown) => {
     process.stderr.write(`错误：${error instanceof Error ? error.message : String(error)}\n`);
