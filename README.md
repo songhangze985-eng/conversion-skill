@@ -2,13 +2,13 @@
 
 **可验证的复杂知识解释与极简白话破译 Skill。** 我们拒绝拿专业词去解释专业词，也拒绝编造拖泥带水的长篇小说；顺着普通人的直觉卡点把底层机制讲透，外行读完十秒内就能用一句大白话向朋友复述出来。
 
-English: Verifiable Mechanism Explainer (v3.0), explaining complex mechanisms, academic papers, repetitive essays, and classical Chinese through one-shot intuitive grounding, habit-aligned analogies, world-author stylistic simulation, and factual verification, built as an [Agent Skill](https://agentskills.io) for Claude Code, Cursor, Codex, Copilot, Gemini CLI, and Web Chat hosts.
+English: Verifiable Mechanism Explainer (v3.1), explaining complex mechanisms, academic papers, repetitive essays, and classical Chinese through one-shot intuitive grounding, habit-aligned analogies, world-author stylistic simulation, and factual verification, built as an [Agent Skill](https://agentskills.io) for Claude Code, Cursor, Codex, Copilot, Gemini CLI, and Web Chat hosts. The same repo also installs as a DeepSeek Harness plugin.
 
 ---
 
 ## 项目简介
 
-很多教程让人像看天书，往往卡在两个极端：一边满篇堆砌未解释的缩写和术语，另一边硬套尴尬的故事外皮（比如把术语音译成假人名去演肥皂剧，或者先弹三轮调查问卷才肯给出一句解释）。`conversion-skill` `3.0.0` 用一套精简渐进的认知与工程规范同时解决这些痛点。
+很多教程让人像看天书，往往卡在两个极端：一边满篇堆砌未解释的缩写和术语，另一边硬套尴尬的故事外皮（比如把术语音译成假人名去演肥皂剧，或者先弹三轮调查问卷才肯给出一句解释）。`conversion-skill` `3.1.0` 用一套精简渐进的认知与工程规范同时解决这些痛点。
 
 第一，**首轮秒懂直出，按路由优先级严守叙述边界**。通俗易懂绝不等于长篇大论编故事。系统建立了清晰的默认路由层级：遇到文言文或翻来覆去讲同一道理的文章，直接启用 `neutral` 极简直述脱水破译；遇到日常概念提问，首轮直接给出切中要害的大白话与习惯话术对位（如拿《王者荣耀》《原神》《无畏契约》《文明6》等 12 款热门游戏的冷却、韧性条、经济局机制，或地铁闸机放行、职场甩锅热梗来对照），点透即止；只有当读者需要深度机制叙事或选择写故事时，才启用 8 大文体或仿真鲁迅、王小波、刘慈欣、古龙、金庸、张爱玲、刘震云等 19 位世界知名作家的笔法围绕当前概念全新创作。
 
@@ -56,6 +56,18 @@ Copy-Item -Recurse conversion-skill "$env:USERPROFILE\.agents\skills\conversion-
 ### 网页端无终端使用（支持零死链独立版导出）
 
 直接下载 [SKILL.md](https://raw.githubusercontent.com/songhangze985-eng/conversion-skill/main/SKILL.md) 上传至网页端即可使用；若网页端无法读取仓库子目录，可在本地运行 `bun run pipeline -- --bundle-web dist-web-skill.md` 生成自动内联四大知识库精华、剥离全部本地路径依赖的纯 Web 独立单文件版本。
+
+### 装进 DeepSeek Harness
+
+如果用的是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，这个仓库可以按组合包装进去，不必再单独复制技能目录。宿主认的是根目录的 `package.json`（里面的 `dsh.bundle`）、`cordis.patch.yml` 和 `index.js`，跟 [dsh-humanizer](https://github.com/lynote-ai/dsh-humanizer)、[dsh-ronge-gongzhonghao](https://github.com/bugtakue/dsh-ronge-gongzhonghao) 是同一套写法：patch 里的 `name` 写包名 `conversion-skill`，插件导出 `inject = ['tools']` 和 `apply`，再把工具注册进宿主。
+
+```bash
+dsh plugin add github:songhangze985-eng/conversion-skill
+```
+
+桌面端或网页端要指定 profile 时，加上 `--profile desktop` 或 `--profile web`。装好之后，会话里可以调用 `pipeline`、`screen_keywords`、`check_output`、`score_card`、`evaluate_pdf`，以及声纹用的 `voice_import`、`voice_profile`、`voice_score`、`voice_remove`。这些工具不调模型，只是去跑仓库里原有的 Bun 脚本，所以机器上要有 Bun。上面的 `npx skills add` 和复制到技能目录的装法照旧，跟插件互不替代。
+
+声纹默认写在 `~/.conversion-skill/voice-profiles.json`。想换地方，可以在自己 profile 的 patch 里覆盖这一行的 `config.storagePath`。
 
 ---
 
@@ -105,6 +117,21 @@ bun run evaluate-pdf -- paper.pdf --style war-room --workspace /tmp/conversion-e
 `pipeline` 与 `screen-keywords` 负责**前置路由、语境消歧与结构化槽位预填**。它们识别文言文、重复观点议论文、公式与学术论文，检索四大 JSON 知识库并输出带 `target_concept_slots` 的规格卡，同时提供 `--bundle-web` 为纯网页端宿主编译无死链独立提示词。
 
 `check-output` 与 `evaluate-pdf` 负责**文体感知门禁验收与双栏学术文献解析**。`check-output` 内置六维文本识别评判（详见 [`references/text-recognition-judgment.md`](references/text-recognition-judgment.md)），拦截多表情标准腔、两三字孤立祈使短句、欧化倒装句、假人名伪类比以及静态名词画等号的非同构映射表，并通过 `--author-profile` 为古龙、海明威等冷峻短句名家及鲁迅、王小波等辩证杂文名家提供精准文体豁免。`evaluate-pdf` 支持双栏学术 PDF 的 `(x, y)` 坐标阅读序还原、连字与断行连字符修复、乱码公式字形预警以及非标准编号核心方法章节的回退定位。
+
+想先看一页纸的结论，而不是整份门禁长报告，给 `check-output` 加上 `--score-card`。它会打一个 0 到 100 的总分，分成可直接交稿、小改后可交、需要改写、重写四档，再按行号列出该改的地方和具体改法。不加这个开关时，原来的文本和 JSON 保持原样。
+
+```bash
+bun run check-output -- evals/fixtures/ok-four-col.md --score-card
+bun run check-output -- story.md --score-card --json
+```
+
+19 位名家笔法还在。只有当你说「按我的文风写」时，才改用你自己的样本。先把几篇你写过的文字导入成本机声纹，再拿草稿去打分。声纹不进仓库，也不替换 `story-authors-kb.json`。
+
+```bash
+bun run voice-profile -- import --name 我的 --file ~/writing/post-a.md --file ~/writing/post-b.md
+bun run voice-profile -- score --name 我的 draft.md
+bun run voice-profile -- list
+```
 
 ### 三、可选 HanLP 辅助说明
 

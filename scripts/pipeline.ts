@@ -66,7 +66,7 @@ export interface UnifiedPipelineOptions {
 }
 
 export interface UnifiedPipelineResult {
-  version: "3.0.0";
+  version: "3.1.0";
   default_routing: {
     mode: DefaultRoutingMode;
     recommended_style: ExpressionStyle;
@@ -217,7 +217,7 @@ export function runUnifiedPipeline(options: UnifiedPipelineOptions): UnifiedPipe
     : undefined;
 
   return {
-    version: "3.0.0",
+    version: "3.1.0",
     default_routing,
     input_analysis,
     one_shot_fast_value: {
@@ -312,7 +312,7 @@ export function bundleStandaloneWebSkill(skillRoot = resolve(import.meta.dir, ".
 }
 
 function help(): void {
-  process.stdout.write(`conversion-skill 统一单次管线与 Web 独立打包器 (v3.0)
+  process.stdout.write(`conversion-skill 统一单次管线与 Web 独立打包器 (v3.1)
 
 用法：
   bun run pipeline -- "待转译的专业语句、文言文或论文段落" [选项]

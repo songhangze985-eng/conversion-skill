@@ -5,7 +5,7 @@ license: MIT
 compatibility: "Host-agnostic Markdown skill with zero runtime dependency. Optional Bun/TypeScript unified pipeline, PDF two-column navigator, and HanLP helper scripts."
 metadata:
   author: songhangze985-eng
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # conversion-skill
@@ -39,7 +39,8 @@ metadata:
 | 零基础小白冷启动 / 苏格拉底启发 / 理解自测 / 交互微件 | `references/beginner-onboarding.md`、`references/socratic-microstep.md`、`references/comprehension-check.md`、`references/visual-interactive.md` |
 | 论文双栏导航 / 老妪门禁 / 六维文本识别评判 / 多轮交互范例 | `references/paper-navigation.md`、`references/lao-yu-gate.md`、`references/text-recognition-judgment.md`、`references/interactive-pipeline-examples.md` |
 | 四大结构化 JSON 知识库（仅取 `StyleSpecCard` 槽位，禁照搬无关标本） | `assets/knowledge/gaming-kb.json`（12款热门游戏）、`life-memes-kb.json`、`classical-chinese-kb.json`、`story-authors-kb.json`（19位名家） |
-| 独立校验与 PDF 评测脚本 (可选 Bun) | `bun run check-output -- <稿.md> [--author-profile <作家>] [--fix] [--baseline-floor]`、`bun run evaluate-pdf -- <in.pdf> --workspace <dir> --style <style>` |
+| 独立校验与 PDF 评测脚本 (可选 Bun) | `bun run check-output -- <稿.md> [--author-profile <作家>] [--fix] [--baseline-floor]`、`bun run check-output -- <稿.md> --score-card`、`bun run evaluate-pdf -- <in.pdf> --workspace <dir> --style <style>` |
+| 按我的文风写（仅当用户明说；不替代 19 位名家库） | `bun run voice-profile -- import --name <名> --file <样本>`，交稿前 `bun run voice-profile -- score --name <名> <稿>`。用户没提自己的文风时，不要读声纹，也不要套用。 |
 
 ## 标准化用户交互流水线（首轮秒懂直出 + 四步交互链路）
 
@@ -65,7 +66,7 @@ v3.0 默认采用**「首轮秒懂直出 + 渐进式微调」**：当用户直�
      - **选【游戏】**：询问具体游戏名（例如输入 `“王者荣耀这款手游”`）-> 查 `gaming-kb.json` 提取专属机制槽位；若所点游戏未入库（`matched: false`），诚实保留用户指定的游戏名做动态同构映射，严禁静默替换成其他游戏。
      - **选【网络热梗】**：**用户没有那么多分类判断力**，不抛分类标签，**直接让用户说出具体的网络热梗**（如「甩锅」「草台班子」「硬控」）-> 查 `life-memes-kb.json` 对位。
      - **选【日常话术】**：**日常话术不需要任何第 3 级询问**，**不需要再做下级询问，直接执行**生活场景转换！
-  3. **选 C（写故事）**：询问选 ① **仿真世界知名作者写法表达**（点名鲁迅、王小波、刘慈欣、古龙、金庸、张爱玲、刘震云、海明威等，查 `assets/knowledge/story-authors-kb.json` 提取 `StyleSpecCard` 围绕本次概念槽位全新创作，库外作家诚实保留原名动态仿真，严禁照搬无关标本）或 ② 经典故事文体与篇幅档位。
+  3. **选 C（写故事）**：询问选 ① **仿真世界知名作者写法表达**（点名鲁迅、王小波、刘慈欣、古龙、金庸、张爱玲、刘震云、海明威等，查 `assets/knowledge/story-authors-kb.json` 提取 `StyleSpecCard` 围绕本次概念槽位全新创作，库外作家诚实保留原名动态仿真，严禁照搬无关标本）或 ② 经典故事文体与篇幅档位。用户若说「按我的文风写」「写成我的口气」，不要查名家库，也不要改走默认故事皮肤：先 `voice-profile show`，没有声纹就请对方给 1–3 篇自己的成稿再 `import`，交稿前用 `voice-profile score` 按句长、标点、立场和用词的分项差距改。没说自己的文风，就当这条不存在。
   4. **选 D（循序启发）**：透明声明「具体输出效果由 Agent 本身性能决定而不是 Skill」，询问认知起点与微步互动形式。
 
 ### Stage 3: 省略中间推导步骤直接交付 + 语境感知固定尾缀
