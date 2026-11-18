@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.1.0 — 2026-11-18
+
+- 仓库可以按 DeepSeek Harness 组合包安装：`dsh plugin add github:songhangze985-eng/conversion-skill`。根目录补上 `cordis.patch.yml` 和 `index.js`，注册 `pipeline`、`screen_keywords`、`check_output`、`score_card`、`evaluate_pdf`，以及声纹四件套。这些工具在宿主里仍然调用原来的 Bun 脚本。`npx skills add` 和复制到技能目录的装法不变。
+- `check-output --score-card` 打出一页成绩单：总分、档位、带行号的命中和具体改法。不传这个开关时，原来的长报告和 JSON 不变。
+- 新增 `voice-profile`。用户把自己的成稿导入后，本地抽出句长、标点、立场和用词指纹，写到 `~/.conversion-skill/voice-profiles.json`，再给草稿打 0–100 的相似度。只在用户要求按自己的文风写时使用，19 位名家库仍在。
+- 离线评测加上成绩单排序和声纹对照。
+
+## 3.0.0 — 2026-11-11
+
+这一版的说明写在提交 `9031e210`（Release v3.0: progressive skill diet, unified pipeline, four KBs, and style-aware gates）。此前 Changelog 停在 2.5.0，仓库里也没有对应的 tag。相对 2.5.0，这一版把技能收成渐进式披露，并补上单次管线和四套知识库。
+
+- `SKILL.md` 压到大约 90 行。多轮对话范例挪到 `references/interactive-pipeline-examples.md`。默认路由改成四档：文言文和车轱辘文走极简直述，短概念首轮直接给大白话，只有点名写故事才上叙事皮肤，论文和公式先拆符号和阅读顺序。
+- 新增 `bun run pipeline`。一次做完输入路由、知识库槽位和可选门禁，也可以用 `--bundle-web` 导出不依赖仓库子目录的单文件提示词。
+- 知识库扩成四套：12 款游戏机制、生活热梗、文言文（含一词多义消歧）、19 位作家的 `StyleSpecCard`。库外的游戏和作家保留原名，不再静默换成库里的条目。
+- `check-output` 按作家档位区分冷峻短句和辩证杂文的豁免。`evaluate-pdf` 补上双栏阅读序、公式字形预警和章节回退。
+- 离线评测 `bun run eval:suite` 覆盖输入路由、标杆样例和 v3 管线。README 改成先讲怎么用，再讲怎么装。
+
 ## 2.5.0 — 2026-11-07
 
 - 新增**叙述边界设定、自建文言文翻译 JSON 知识库与切中观点的关键词筛选工具**（`references/narrative-boundary-and-gist.md`、`assets/knowledge/classical-chinese-kb.json`、`scripts/screen-keywords.ts`）：

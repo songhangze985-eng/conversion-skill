@@ -25,7 +25,7 @@ describe("v3.0 Eight-Point Third-Party Critique Remediations", () => {
     const byteSize = Buffer.byteLength(skillRaw, "utf8");
     expect(lineCount).toBeLessThanOrEqual(180);
     expect(byteSize).toBeLessThan(18000);
-    expect(skillRaw).toContain("version: \"3.0.0\"");
+    expect(skillRaw).toContain("version: \"3.1.0\"");
     expect(skillRaw).toContain("references/interactive-pipeline-examples.md");
 
     const examplesRaw = readFileSync(resolve(ROOT_DIR, "references/interactive-pipeline-examples.md"), "utf8");

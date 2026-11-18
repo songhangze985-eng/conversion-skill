@@ -1,0 +1,7 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+# `name` is the package name so Node resolves this repo's main entry.
+- insert:
+    - id: conversion-skill
+      name: 'conversion-skill'
+      config:
+        storagePath: ~/.conversion-skill/voice-profiles.json
