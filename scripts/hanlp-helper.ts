@@ -595,6 +595,99 @@ export function evaluateMicroSentenceCracker(
   };
 }
 
+const BA_INSTRUMENT_RE =
+  /([^，,。！？；\n]*?)(把|将)([\u4e00-\u9fffA-Za-z0-9]{1,10}?)(通过|利用|使用|借助)([\u4e00-\u9fffA-Za-z0-9]{2,10})(?:来)?(?:进行|完成)?([\u4e00-\u9fff]{2})(?=[，,。！？；\n]|$)/gu;
+
+// Compounds and verb-objects where 使用/通过 are not instrument prepositions.
+const NON_INSTRUMENT_COMPOUNDS = new Set([
+  "使用手册", "使用说明", "使用指南", "使用文档", "使用教程", "使用条款",
+  "通过评审", "通过审核", "通过审查", "通过测试", "通过考试", "通过验收",
+  "通过认证", "通过检查", "通过审批", "通过考核", "通过表决",
+]);
+
+interface TokenSpan {
+  start: number;
+  end: number;
+}
+
+function wordSpans(text: string): TokenSpan[] {
+  const spans: TokenSpan[] = [];
+  let cursor = 0;
+  for (const token of segmentTextLocal(text)) {
+    const start = text.indexOf(token, cursor);
+    if (start < 0) break;
+    spans.push({ start, end: start + token.length });
+    cursor = start + token.length;
+  }
+  return spans;
+}
+
+function spanAligns(spans: TokenSpan[], start: number, end: number): boolean {
+  const hit = spans.filter((span) => span.start < end && span.end > start);
+  return hit.length > 0 && hit[0].start === start && hit[hit.length - 1].end === end;
+}
+
+function locateParts(full: string, parts: string[]): number[] {
+  const starts: number[] = [];
+  let cursor = 0;
+  for (const part of parts) {
+    const start = full.indexOf(part, cursor);
+    if (start < 0) return [];
+    starts.push(start);
+    cursor = start + part.length;
+  }
+  return starts;
+}
+
+function isBareFutureJiang(marker: string, objectText: string): boolean {
+  return marker === "将" && /^(?:于|要|会|在|从|向)/u.test(objectText);
+}
+
+function isRealInstrumentPhrase(prep: string, inst: string): boolean {
+  const head = inst.replace(/(?:进行|完成|实现|执行)$/u, "");
+  if (!head) return false;
+  return !NON_INSTRUMENT_COMPOUNDS.has(`${prep}${head}`);
+}
+
+interface BaInstrumentHit {
+  full: string;
+  prefix: string;
+  ba: string;
+  obj: string;
+  prep: string;
+  inst: string;
+  verb: string;
+}
+
+function findBaInstrument(sentence: string): BaInstrumentHit | null {
+  const canAlign = typeof Intl !== "undefined" && "Segmenter" in Intl;
+  const spans = canAlign ? wordSpans(sentence) : [];
+  const re = new RegExp(BA_INSTRUMENT_RE.source, "gu");
+  let matched: RegExpExecArray | null;
+  while ((matched = re.exec(sentence))) {
+    const full = matched[0];
+    const prefix = matched[1] ?? "";
+    const ba = matched[2] ?? "";
+    const obj = matched[3] ?? "";
+    const prep = matched[4] ?? "";
+    const inst = matched[5] ?? "";
+    const verb = matched[6] ?? "";
+    if (isBareFutureJiang(ba, obj) || !isRealInstrumentPhrase(prep, inst)) {
+      continue;
+    }
+    if (canAlign) {
+      const base = matched.index;
+      const starts = locateParts(full, [prefix, ba, obj, prep, inst, verb]);
+      if (starts.length !== 6) continue;
+      const covers = (partIndex: number, part: string) =>
+        spanAligns(spans, base + starts[partIndex], base + starts[partIndex] + part.length);
+      if (!covers(1, ba) || !covers(3, prep) || !covers(4, inst) || !covers(5, verb)) continue;
+    }
+    return { full, prefix, ba, obj, prep, inst, verb };
+  }
+  return null;
+}
+
 export function evaluateGrammarInspection(rawMarkdown: string): GrammarInspectionResult {
   const withoutScaffold = rawMarkdown
     .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/u, "")
@@ -672,12 +765,11 @@ export function evaluateGrammarInspection(rawMarkdown: string): GrammarInspectio
       continue;
     }
 
-    // 4. SVO Word Order Error: 把/对...通过/利用... (object placed before instrument adverbial)
-    const baInstrumentMatch = sent.match(
-      /([^，,。！？；\n]*?)(把|将)([\u4e00-\u9fffA-Za-z0-9]{1,10}?)(通过|利用|使用|借助)([\u4e00-\u9fffA-Za-z0-9]{2,10})(?:来)?(?:进行|完成)?([\u4e00-\u9fff]{2})(?=[，,。！？；\n]|$)/u
-    );
+    // 4. SVO Word Order Error: 把/将 + object before a real instrument adverbial.
+    // Future 将 (将于/将要/将会) is not 把. 使用/通过 inside words such as 使用手册/通过评审 is not an instrument.
+    const baInstrumentMatch = findBaInstrument(sent);
     if (baInstrumentMatch) {
-      const [, prefix, ba, obj, prep, inst, verb] = baInstrumentMatch;
+      const { full, prefix, ba, obj, prep, inst, verb } = baInstrumentMatch;
       seenSentences.add(sent);
       issues.push({
         sentence: sent,
@@ -685,7 +777,7 @@ export function evaluateGrammarInspection(rawMarkdown: string): GrammarInspectio
         kind: "svo_order_error",
         pattern_name: "object_before_instrument_adverbial",
         reason: `主谓宾与状语语序错误：受事宾语「${ba}${obj}」被错误置于方式状语「${prep}${inst}」之前`,
-        suggestion: sent.replace(baInstrumentMatch[0], `${prefix}${prep}${inst}${ba}${obj}${verb}`),
+        suggestion: sent.replace(full, `${prefix}${prep}${inst}${ba}${obj}${verb}`),
       });
       continue;
     }
