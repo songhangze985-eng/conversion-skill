@@ -4,7 +4,7 @@
 
 ---
 
-## 一、五维子能力定义
+## 一、六维子能力定义
 
 ### 1. readme表达审查（`readme_expression_review`）
 
