@@ -27,6 +27,8 @@ import {
 import { evaluateClaimFidelity, evaluateTextRecognitionJudgment } from "./hanlp-helper";
 import { buildNavigation, normalizePdfAcademicText, sortPdfTextItemsTwoColumn } from "./evaluate-pdf";
 import { bundleStandaloneWebSkill, runUnifiedPipeline } from "./pipeline";
+import { buildScoreCard } from "./score-card";
+import { extractFingerprint, scoreAgainstFingerprint } from "./voice-profile";
 import { queryAuthorStyleByName, queryGameTermsByTitle, screenThesisKeywords, translateClassicalChinese } from "./screen-keywords";
 import { relativeIsInside, stableJson, usageError } from "./shared";
 import { analyzeInput } from "./validate-input";
@@ -39,7 +41,9 @@ export interface OfflineCaseCheck {
     | "adversarial_nli"
     | "visual_mermaid"
     | "text_recognition_judgment"
-    | "v3_lift_and_stress";
+    | "v3_lift_and_stress"
+    | "score_card"
+    | "voice_profile";
   passed: boolean;
   details: string;
 }
@@ -411,6 +415,38 @@ export function runOfflineBenchmarkSuite(): OfflineBenchmarkReport {
       !webBundle.includes("](references/") &&
       !webBundle.includes("bun run "),
     details: `layout=${twoColSorted.layoutMode}, method_found=${navEntries.some((e) => e.kind === "method")}, route=${pipeRes.default_routing.mode}, web_bytes=${Buffer.byteLength(webBundle, "utf8")}`,
+  });
+
+  const goodCard = buildScoreCard(
+    readFileSync(join(root, "evals/fixtures/ok-four-col.md"), "utf8"),
+    analyzeMarkdown(readFileSync(join(root, "evals/fixtures/ok-four-col.md"), "utf8"), { level: "default", expectedStyle: "detective" }),
+  );
+  const badCard = buildScoreCard(
+    readFileSync(join(root, "evals/fixtures/fail-no-mapping.md"), "utf8"),
+    analyzeMarkdown(readFileSync(join(root, "evals/fixtures/fail-no-mapping.md"), "utf8"), { level: "default", expectedStyle: "neutral" }),
+  );
+  checks.push({
+    id: "v3.1:score-card-ranks-complete-draft-above-missing-mapping",
+    category: "score_card",
+    passed:
+      goodCard.score > badCard.score
+      && goodCard.score >= 50
+      && badCard.hits.some((hit) => hit.dimension === "结构" && hit.fix.includes("四列"))
+      && goodCard.grade.length > 0,
+    details: `good=${goodCard.score}/${goodCard.grade} bad=${badCard.score}/${badCard.grade} bad_hits=${badCard.hit_count}`,
+  });
+
+  const ownVoice = "我昨天又把菜做咸了。你说这盐怎么这么不听话？我就先尝一口，再决定加不加。真烦。下次盐搁远一点。锅边糊了我就把火关小。";
+  const ownVoiceAgain = "我今天还是把汤做咸了。你尝一口就知道。我就先关火，再兑水。烦死了。盐罐给我搁远点。糊了的边我刮掉。";
+  const notMyVoice = "综上所述，本文拟从系统层面探讨盐度控制之必要性。首先，盐的投放应当遵循科学流程。其次，相关主体需要充分认识到过量投放所带来的负面影响。因此，我们必须构建一套完整的闭环机制，从而实现盐度管理的规范化与高质量发展。";
+  const voicePrint = extractFingerprint([ownVoice, ownVoiceAgain]);
+  const likeMe = scoreAgainstFingerprint(ownVoice, voicePrint);
+  const unlikeMe = scoreAgainstFingerprint(notMyVoice, voicePrint);
+  checks.push({
+    id: "v3.1:voice-profile-prefers-the-users-own-sentences",
+    category: "voice_profile",
+    passed: likeMe.score >= 80 && likeMe.score >= unlikeMe.score + 15 && unlikeMe.notes.length > 0,
+    details: `like=${likeMe.score} unlike=${unlikeMe.score} notes=${unlikeMe.notes.length}`,
   });
 
   const passedCount = checks.filter((c) => c.passed).length;

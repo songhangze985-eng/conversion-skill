@@ -1,9 +1,43 @@
 {
   "name": "conversion-skill",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
-  "description": "Optional Bun/TypeScript helpers for conversion-skill. The Markdown skill itself does not require Bun.",
+  "description": "可验证的复杂知识解释 Skill，兼作 DeepSeek Harness 插件。Markdown 技能本身不依赖 Bun；可选工具链用 Bun 跑。",
   "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "SKILL.md",
+    "scripts",
+    "assets",
+    "references",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "agent-skill",
+    "conversion"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/songhangze985-eng/conversion-skill.git"
+  },
+  "license": "MIT",
   "engines": {
     "bun": ">=1.1.0"
   },
@@ -14,6 +48,7 @@
     "check-output": "bun scripts/check-output.ts",
     "screen-keywords": "bun scripts/screen-keywords.ts",
     "evaluate-pdf": "bun scripts/evaluate-pdf.ts",
+    "voice-profile": "bun scripts/voice-profile.ts",
     "eval:suite": "bun scripts/run-evals.ts",
     "test": "bun test scripts"
   },
