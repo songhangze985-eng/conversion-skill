@@ -408,6 +408,20 @@ function loadFactLedger(path: string | undefined, mapping: MappingCheck, require
   return { provided: true, path, valid: errors.length === 0 && facts.length > 0, errors, facts };
 }
 
+function containsFactId(haystack: string, factId: string): boolean {
+  const source = haystack.toLocaleLowerCase();
+  const needle = factId.toLocaleLowerCase();
+  let from = 0;
+  while (from <= source.length - needle.length) {
+    const index = source.indexOf(needle, from);
+    if (index < 0) return false;
+    const next = source.charCodeAt(index + needle.length);
+    if (Number.isNaN(next) || next < 48 || next > 57) return true;
+    from = index + 1;
+  }
+  return false;
+}
+
 function factCoverage(
   markdown: string,
   mapping: MappingCheck,
@@ -432,8 +446,8 @@ function factCoverage(
     const absentMappingTerms = mappingTerms.filter((term) => !covers(mappingText, term));
     // Synthetic facts derived from a mapping table have no source IDs. External
     // PDF ledgers do: requiring those IDs makes the evidence trail auditable.
-    const hasMappingId = !ledger.provided || normalizedContains(mappingText, fact.id);
-    const hasVerificationId = !ledger.provided || normalizedContains(verification, fact.id);
+    const hasMappingId = !ledger.provided || containsFactId(mappingText, fact.id);
+    const hasVerificationId = !ledger.provided || containsFactId(verification, fact.id);
     if (contentMissing.length === 0 && hasMappingId && hasVerificationId) covered.push(fact.id);
     else {
       const reasons = [

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   analyzeMarkdown,
   evaluateChunksIndependently,
@@ -29,6 +31,47 @@ import { stableJson } from "./shared";
 const fixtures = resolve(import.meta.dir, "../evals/fixtures");
 
 describe("check-output mechanical gates", () => {
+  test("fact id coverage does not treat a longer numeric id as a shorter one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "fact-id-"));
+    const factsPath = join(dir, "fact-ledger.verified.json");
+    writeFileSync(factsPath, JSON.stringify({
+      schema_version: "1.0",
+      review_status: "verified",
+      facts: [
+        { id: "F1", claim: "第一条主张", anchor: { page: 1, section: "abstract" } },
+        { id: "F2", claim: "第二条主张", anchor: { page: 1, section: "abstract" } },
+      ],
+    }));
+    const markdown = `# 覆盖误报
+
+> 表达风格：\`anime\`
+> 篇幅：\`default\`
+
+| 知识概念 | 故事元素 | 对应理由 |
+|---|---|---|
+| [F10] 十号概念 | 第十站 | 只标记十号 |
+| [F2] 二号概念 | 第二站 | 只标记二号 |
+
+## 正文
+
+老师只点了十号和二号，没有点一号。
+
+## 知识点校验
+
+[F10] 十号概念留在第十站。[F2] 二号概念留在第二站。这里没有单独的一号标记。
+`;
+    try {
+      const result = analyzeMarkdown(markdown, { level: "default", expectedStyle: "anime", factsPath });
+      expect(result.structure_verdict).toBe("PASS");
+      expect(result.covered).toEqual(["F2"]);
+      expect(result.missing).toEqual(["F1: 映射表缺少事实 ID、知识点校验缺少事实 ID"]);
+      expect(result.term_id_coverage_verdict).toBe("FAIL");
+      expect(result.verdict).toBe("FAIL");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("legacy three-column mapping still passes the mechanical verdict", () => {
     const result = analyzeMarkdown(readMarkdown(resolve(fixtures, "ok-three-col.md")), {
       level: "default",
