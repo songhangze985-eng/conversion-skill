@@ -39,7 +39,7 @@ def run_hanlp_restful(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     auth = payload.get("auth") or None
     language = payload.get("language") or "zh"
     text = payload.get("text") or ""
-    tasks = payload.get("tasks") or ["tok/fine", "pos/ctb", "ner/msra", "srl", "dep"]
+    tasks = payload.get("tasks") or ["tok/fine", "ner/msra", "srl", "dep"]
 
     client = HanLPClient(url, auth=auth, language=language)
     doc = client.parse(text, tasks=tasks)
@@ -55,11 +55,6 @@ def run_hanlp_restful(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             result["sts_scores"] = client.semantic_textual_similarity(payload["sts_pairs"])
         except Exception:
             result["sts_scores"] = []
-    if payload.get("summarize"):
-        try:
-            result["summary"] = client.extractive_summarization(text, topk=3)
-        except Exception:
-            result["summary"] = {}
     return result
 
 
@@ -71,7 +66,7 @@ def run_hanlp_native(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     text = payload.get("text") or ""
     model_name = payload.get("model") or "CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_SMALL_ZH"
-    tasks = payload.get("tasks") or ["tok/fine", "pos/ctb", "ner/msra", "srl", "dep"]
+    tasks = payload.get("tasks") or ["tok/fine", "ner/msra", "srl", "dep"]
     custom_dict = load_custom_dict(payload.get("custom_dict_path"))
 
     sentences = hanlp.utils.rules.split_sentence(text)

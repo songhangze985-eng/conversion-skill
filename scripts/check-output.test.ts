@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   analyzeMarkdown,
   evaluateChunksIndependently,
@@ -29,6 +31,47 @@ import { stableJson } from "./shared";
 const fixtures = resolve(import.meta.dir, "../evals/fixtures");
 
 describe("check-output mechanical gates", () => {
+  test("fact id coverage does not treat a longer numeric id as a shorter one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "fact-id-"));
+    const factsPath = join(dir, "fact-ledger.verified.json");
+    writeFileSync(factsPath, JSON.stringify({
+      schema_version: "1.0",
+      review_status: "verified",
+      facts: [
+        { id: "F1", claim: "第一条主张", anchor: { page: 1, section: "abstract" } },
+        { id: "F2", claim: "第二条主张", anchor: { page: 1, section: "abstract" } },
+      ],
+    }));
+    const markdown = `# 覆盖误报
+
+> 表达风格：\`anime\`
+> 篇幅：\`default\`
+
+| 知识概念 | 故事元素 | 对应理由 |
+|---|---|---|
+| [F10] 十号概念 | 第十站 | 只标记十号 |
+| [F2] 二号概念 | 第二站 | 只标记二号 |
+
+## 正文
+
+老师只点了十号和二号，没有点一号。
+
+## 知识点校验
+
+[F10] 十号概念留在第十站。[F2] 二号概念留在第二站。这里没有单独的一号标记。
+`;
+    try {
+      const result = analyzeMarkdown(markdown, { level: "default", expectedStyle: "anime", factsPath });
+      expect(result.structure_verdict).toBe("PASS");
+      expect(result.covered).toEqual(["F2"]);
+      expect(result.missing).toEqual(["F1: 映射表缺少事实 ID、知识点校验缺少事实 ID"]);
+      expect(result.term_id_coverage_verdict).toBe("FAIL");
+      expect(result.verdict).toBe("FAIL");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("legacy three-column mapping still passes the mechanical verdict", () => {
     const result = analyzeMarkdown(readMarkdown(resolve(fixtures, "ok-three-col.md")), {
       level: "default",
@@ -183,6 +226,13 @@ describe("check-output mechanical gates", () => {
     expect(r1.label).toBe("ai生产");
     expect(r1.emoji_overuse).toBe(true);
 
+    const twoHeadingEmojis = "# 🚀 极速引擎\n\n## ✨ 核心特性\n\n正文没有别的表情。\n";
+    const rHeadings = evaluateReadmeExpression(twoHeadingEmojis);
+    expect(rHeadings.emoji_count).toBe(2);
+    expect(rHeadings.emoji_overuse).toBe(true);
+    expect(rHeadings.is_ai_produced).toBe(true);
+    expect(rHeadings.label).toBe("ai生产");
+
     const fragStdReadme = [
       "# 极速引擎",
       "",
@@ -236,6 +286,30 @@ describe("check-output mechanical gates", () => {
 
     const full = evaluateTextRecognitionJudgment(sample);
     expect(full.labels).toContain("语法待修正");
+  });
+
+  test("text recognition judgment: --fix leaves non-instrument 把/将 and 的-stacking notes unchanged", () => {
+    const manual = "编辑把用户使用手册寄出。";
+    const launch = "项目将于下周通过评审完成上线。";
+    expect(normalizeOutputMarkdown(manual)).toBe(manual);
+    expect(normalizeOutputMarkdown(launch)).toBe(launch);
+    expect(evaluateGrammarInspection(manual).issues.some((issue) => issue.pattern_name === "object_before_instrument_adverbial")).toBe(false);
+    expect(evaluateGrammarInspection(launch).issues.some((issue) => issue.pattern_name === "object_before_instrument_adverbial")).toBe(false);
+
+    const genuine = "调音师把输入矩阵通过正交变换拆分。";
+    expect(normalizeOutputMarkdown(genuine)).toContain("调音师通过正交变换把输入矩阵拆分");
+    const byMail = "编辑把文件通过邮件寄出。";
+    expect(normalizeOutputMarkdown(byMail)).toContain("编辑通过邮件把文件寄出");
+    const disposalJiang = "技师将输入矩阵通过正交变换拆分。";
+    expect(normalizeOutputMarkdown(disposalJiang)).toContain("技师通过正交变换将输入矩阵拆分");
+
+    const stacked = "系统读取着在每次迭代的反向传播的过程中被优化器更新的权重参数。";
+    const stackedFixed = normalizeOutputMarkdown(stacked);
+    expect(stackedFixed).toContain("系统读取着在每次迭代的反向传播的过程中被优化器更新的权重参数");
+    expect(stackedFixed).not.toContain("请拆分为动宾短句");
+    expect(evaluateGrammarInspection(stacked).issues.find((issue) => issue.kind === "anglicized_de_stacking")?.suggestion).toBe(
+      "请拆分为动宾短句或后置说明，避免多层「的」字包孕定语。",
+    );
   });
 
   test("text recognition judgment extensions: rhetorical shells, negative parallelism, sticker analogies, Europeanized syntax, retelling anchor, and directory scan", () => {
@@ -304,5 +378,43 @@ describe("check-output mechanical gates", () => {
     expect(gist).toContain("切中观点·极简白话与话术映射报告");
     expect(gist).toContain("弊在赂秦");
     expect(gist).toContain("游戏玩家常用话术");
+  });
+
+  test("stdout emit flags keep the mechanical exit status", async () => {
+    const script = resolve(import.meta.dir, "check-output.ts");
+    const fail = resolve(fixtures, "fail-no-mapping.md");
+    const pass = resolve(fixtures, "ok-three-col.md");
+    const run = async (args: string[]) => {
+      const child = Bun.spawn([process.execPath, script, ...args], { stdout: "pipe", stderr: "pipe" });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { stdout, stderr, code };
+    };
+
+    const bare = await run([fail]);
+    expect(bare.code).toBe(1);
+    expect(bare.stdout).toContain("转换结果校验");
+
+    const markers = [
+      ["--emit-beginner-card", "小白一秒读懂卡"],
+      ["--emit-gist", "切中观点·极简白话与话术映射报告"],
+      ["--emit-grammar-marked", "没有任何映射表"],
+    ] as const;
+    for (const [flag, marker] of markers) {
+      const emitted = await run([fail, flag, "-"]);
+      expect(emitted.code).toBe(1);
+      expect(emitted.stderr).toBe("");
+      expect(emitted.stdout).toContain(marker);
+      expect(emitted.stdout).not.toContain("转换结果校验");
+    }
+
+    const passing = await run([pass, "--style", "anime", "--emit-beginner-card", "-"]);
+    expect(passing.code).toBe(0);
+    expect(passing.stderr).toBe("");
+    expect(passing.stdout).toContain("小白一秒读懂卡");
+    expect(passing.stdout).not.toContain("转换结果校验");
   });
 });

@@ -49,7 +49,10 @@ export type DefaultRoutingMode =
   | "paper_navigation_first"
   | "formula_symbol_grounding"
   | "habit_fast_value"
-  | "author_or_story_narrative";
+  | "author_or_story_narrative"
+  | "refuse_length"
+  | "refuse_volume"
+  | "refuse_unreadable";
 
 export interface UnifiedPipelineOptions {
   inputText: string;
@@ -88,10 +91,31 @@ export interface UnifiedPipelineResult {
   elapsed_ms: number;
 }
 
+const REFUSAL_REPLY: Record<"refuse_length" | "refuse_volume" | "refuse_unreadable", string> = {
+  refuse_length: "这么多！是让我写水文吗",
+  refuse_volume: "这么多！是让我写水文吗",
+  refuse_unreadable: "没有稿费我可不写",
+};
+
+function asRefusalAction(
+  action: InputAnalysis["recommend_action"],
+): keyof typeof REFUSAL_REPLY | undefined {
+  if (action === "refuse_length" || action === "refuse_volume" || action === "refuse_unreadable") return action;
+  return undefined;
+}
+
 export function resolveDefaultRouting(
   analysis: InputAnalysis,
   opts: Pick<UnifiedPipelineOptions, "gameTitle" | "memeTerm" | "authorName" | "style">,
 ): UnifiedPipelineResult["default_routing"] {
+  const refused = asRefusalAction(analysis.recommend_action);
+  if (refused) {
+    return {
+      mode: refused,
+      recommended_style: "neutral",
+      rationale: REFUSAL_REPLY[refused],
+    };
+  }
   if (analysis.is_empty || analysis.is_chitchat) {
     return {
       mode: "greeting_or_chitchat",
@@ -154,8 +178,9 @@ export function runUnifiedPipeline(options: UnifiedPipelineOptions): UnifiedPipe
   });
   const default_routing = resolveDefaultRouting(input_analysis, options);
 
+  const refused = asRefusalAction(input_analysis.recommend_action);
   const keyword_screening =
-    !input_analysis.is_empty && !input_analysis.is_chitchat
+    !refused && !input_analysis.is_empty && !input_analysis.is_chitchat
       ? screenThesisKeywords(options.inputText, { habit })
       : undefined;
 
@@ -180,11 +205,13 @@ export function runUnifiedPipeline(options: UnifiedPipelineOptions): UnifiedPipe
     meme_lookup?.stage3_followup_prompt ??
     buildContextAwareFollowupPrompt(options.inputText);
 
-  const pithy_gist = input_analysis.is_empty || input_analysis.is_chitchat
-    ? "你好啊，我可以帮你把你不懂的话尽量转换成你能听懂的，告诉你！可以发我语句或文件来处理哦！文言文、文献这些都可以尝试呀"
-    : keyword_screening?.classical_translation?.pithy_vernacular ??
-      keyword_screening?.pithy_vernacular_summary ??
-      options.inputText.slice(0, 120);
+  const pithy_gist = refused
+    ? REFUSAL_REPLY[refused]
+    : input_analysis.is_empty || input_analysis.is_chitchat
+      ? "你好啊，我可以帮你把你不懂的话尽量转换成你能听懂的，告诉你！可以发我语句或文件来处理哦！文言文、文献这些都可以尝试呀"
+      : keyword_screening?.classical_translation?.pithy_vernacular ??
+        keyword_screening?.pithy_vernacular_summary ??
+        options.inputText.slice(0, 120);
 
   const effectiveStyle = options.style ?? default_routing.recommended_style;
   const effectiveLevel = options.level ?? "default";
@@ -338,8 +365,7 @@ function help(): void {
 `);
 }
 
-if (import.meta.main) {
-  const argv = Bun.argv.slice(2);
+async function main(argv: string[]): Promise<void> {
   let inputArg: string | undefined;
   let filePath: string | undefined;
   let topic: string | undefined;
@@ -434,7 +460,7 @@ if (import.meta.main) {
       if (!bundleWebOut) usageError("--bundle-web 需要输出文件路径或 -");
       continue;
     }
-    if (arg.startsWith("-")) usageError(`未知选项：${arg}`);
+    if (arg.startsWith("-") && arg !== "-") usageError(`未知选项：${arg}`);
     if (inputArg) usageError("只接受一个输入源文本参数");
     inputArg = arg;
   }
@@ -456,7 +482,7 @@ if (import.meta.main) {
     if (!existsSync(full)) usageError(`输入文件不存在：${full}`);
     inputText = readFileSync(full, "utf8");
   } else if (inputArg === "-") {
-    inputText = readStdIn();
+    inputText = await readStdIn();
   } else if (inputArg !== undefined) {
     inputText = inputArg;
   } else {
@@ -506,4 +532,11 @@ if (import.meta.main) {
     process.stdout.write(`${lines.join("\n")}\n`);
   }
   process.exit(result.verification && result.verification.verdict === "FAIL" ? 1 : 0);
+}
+
+if (import.meta.main) {
+  main(Bun.argv.slice(2)).catch((error: unknown) => {
+    process.stderr.write(`错误：${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(2);
+  });
 }

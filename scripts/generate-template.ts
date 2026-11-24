@@ -34,7 +34,7 @@ function prefillFromSource(
   hanlpOptions?: HanLPOptions,
   analysis?: HanLPDocumentAnalysis,
   habit: UserHabitOption = "auto",
-): { facts: string; mappingRows: string; CoreGist?: string } {
+): { facts: string; mappingRows: string } {
   const resolved = analysis ?? analyzeWithHanLPSync(sourceText, hanlpOptions?.enabled ? hanlpOptions : { ...hanlpOptions, enabled: false, mode: "local-fallback" });
   const screened = screenThesisKeywords(sourceText, { habit });
   const factLines = resolved.srlFrames.slice(0, 4).map((frame) => {
@@ -57,7 +57,6 @@ function prefillFromSource(
     mappingRows: concepts.length > 0
       ? concepts.map((concept, idx) => `| ${concept} | ${idx === 0 && firstHabitAnalogy ? `${screened.habit_analogy_mappings[0]?.habit_label ?? "日常话术"}` : ""} | ${idx === 0 && firstHabitAnalogy ? firstHabitAnalogy : ""} |  |`).join("\n")
       : "|  |  |  |  |",
-    CoreGist: screened.pithy_vernacular_summary,
   };
 }
 

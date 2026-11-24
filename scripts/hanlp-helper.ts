@@ -8,8 +8,8 @@ import { spawnSync } from "node:child_process";
  *
  * Bridges `hankcs/HanLP` (RESTful API + Native Python API + Offline Fallback)
  * into `conversion-skill`'s 5-step knowledge conversion workflow:
- *  1. Fine/Coarse Tokenization (`tok/fine`, `tok/coarse`) & Custom Dictionary rules (`dict_force`, `dict_combine`)
- *  2. Part-of-Speech Tagging (`pos/ctb`, `pos/pku`) & Named Entity Recognition (`ner/msra`, `ner/ontonotes`)
+ *  1. Fine Tokenization (`tok/fine`) & Custom Dictionary rules (`dict_force`, `dict_combine`)
+ *  2. Named Entity Recognition (`ner/msra`, `ner/ontonotes`)
  *  3. Semantic Role Labeling (`srl`) -> Extracts `ARG0` (Actor), `PRED` (Core Action), `ARG1` (Target),
  *     `ARGM-CND` / `ARGM-TMP` (Trigger Condition / Constraint) for Step 2 Fact Skeletons
  *  4. Dependency Parsing (`dep`) -> Computes syntactic tree depth & clause complexity for Step 5 Lao-Yu Gate
@@ -185,12 +185,9 @@ export interface HanLPDocumentAnalysis {
   backendUsed: HanLPBackendMode;
   sentences: string[];
   tokensFine: string[][];
-  tokensCoarse: string[][];
-  posTags: string[][];
   entities: HanLPEntity[];
   srlFrames: HanLPSrlFrame[];
   keyphrases: Array<{ phrase: string; score: number }>;
-  extractiveSummary: string[];
   depDiagnostics: HanLPDepDiagnostics;
 }
 
@@ -254,6 +251,8 @@ const AI_README_STANDARDIZED_PHRASES = [
 ];
 
 const EMOJI_REGEX = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2705}\u{274C}\u{26A1}\u{2728}]/gu;
+// 全局正则的 lastIndex 会让后面的标题或列表行漏判表情。
+const EMOJI_LINE_REGEX = new RegExp(EMOJI_REGEX.source, "u");
 
 const STOPWORDS_EN = new Set([
   "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
@@ -388,7 +387,7 @@ export function evaluateReadmeExpression(rawMarkdown: string): ReadmeExpressionR
 
   const lines = withoutCode.split(/\r?\n/);
   const headingOrBulletEmojis = lines.filter(
-    (line) => /^(?:#{1,6}\s+|[-*+•]\s+|\d+[.)、]\s+)/u.test(line.trim()) && EMOJI_REGEX.test(line)
+    (line) => /^(?:#{1,6}\s+|[-*+•]\s+|\d+[.)、]\s+)/u.test(line.trim()) && EMOJI_LINE_REGEX.test(line)
   ).length;
   const emoji_overuse = emoji_count >= 3 || headingOrBulletEmojis >= 2;
 
@@ -456,18 +455,19 @@ export function resolveAuthorGateProfile(
   authorOrStyle?: string | null,
   rawMarkdown = "",
 ): AuthorGateProfile {
-  const combined = `${authorOrStyle ?? ""}\n${rawMarkdown.slice(0, 600)}`.toLocaleLowerCase();
+  // The flag, style argument, and author-profile string may name the writer directly.
+  // Manuscript text waives only through an explicit 作家风格： or 仿真【】 marker.
+  const profileSource = authorOrStyle ?? "";
+  const markerSource = rawMarkdown.slice(0, 600);
   if (
-    /古龙|gu\s*long|gulong|海明威|hemingway|契诃夫|chekhov|staccato_literary|\bverse\b|作家风格[：:]\s*`?(?:古龙|海明威|契诃夫)|仿真【(?:古龙|海明威|契诃夫)】/iu.test(
-      combined,
-    )
+    /古龙|gu\s*long|gulong|海明威|hemingway|契诃夫|chekhov|staccato_literary|\bverse\b/iu.test(profileSource) ||
+    /作家风格[：:]\s*`?(?:古龙|海明威|契诃夫)|仿真【(?:古龙|海明威|契诃夫)】/iu.test(markerSource)
   ) {
     return "staccato_literary";
   }
   if (
-    /鲁迅|lu\s*xun|luxun|王小波|wang\s*xiaobo|刘震云|liu\s*zhenyun|dialectic_satire|作家风格[：:]\s*`?(?:鲁迅|王小波|刘震云)|仿真【(?:鲁迅|王小波|刘震云)】/iu.test(
-      combined,
-    )
+    /鲁迅|lu\s*xun|luxun|王小波|wang\s*xiaobo|刘震云|liu\s*zhenyun|dialectic_satire/iu.test(profileSource) ||
+    /作家风格[：:]\s*`?(?:鲁迅|王小波|刘震云)|仿真【(?:鲁迅|王小波|刘震云)】/iu.test(markerSource)
   ) {
     return "dialectic_satire";
   }
@@ -595,6 +595,99 @@ export function evaluateMicroSentenceCracker(
   };
 }
 
+const BA_INSTRUMENT_RE =
+  /([^，,。！？；\n]*?)(把|将)([\u4e00-\u9fffA-Za-z0-9]{1,10}?)(通过|利用|使用|借助)([\u4e00-\u9fffA-Za-z0-9]{2,10})(?:来)?(?:进行|完成)?([\u4e00-\u9fff]{2})(?=[，,。！？；\n]|$)/gu;
+
+// Compounds and verb-objects where 使用/通过 are not instrument prepositions.
+const NON_INSTRUMENT_COMPOUNDS = new Set([
+  "使用手册", "使用说明", "使用指南", "使用文档", "使用教程", "使用条款",
+  "通过评审", "通过审核", "通过审查", "通过测试", "通过考试", "通过验收",
+  "通过认证", "通过检查", "通过审批", "通过考核", "通过表决",
+]);
+
+interface TokenSpan {
+  start: number;
+  end: number;
+}
+
+function wordSpans(text: string): TokenSpan[] {
+  const spans: TokenSpan[] = [];
+  let cursor = 0;
+  for (const token of segmentTextLocal(text)) {
+    const start = text.indexOf(token, cursor);
+    if (start < 0) break;
+    spans.push({ start, end: start + token.length });
+    cursor = start + token.length;
+  }
+  return spans;
+}
+
+function spanAligns(spans: TokenSpan[], start: number, end: number): boolean {
+  const hit = spans.filter((span) => span.start < end && span.end > start);
+  return hit.length > 0 && hit[0].start === start && hit[hit.length - 1].end === end;
+}
+
+function locateParts(full: string, parts: string[]): number[] {
+  const starts: number[] = [];
+  let cursor = 0;
+  for (const part of parts) {
+    const start = full.indexOf(part, cursor);
+    if (start < 0) return [];
+    starts.push(start);
+    cursor = start + part.length;
+  }
+  return starts;
+}
+
+function isBareFutureJiang(marker: string, objectText: string): boolean {
+  return marker === "将" && /^(?:于|要|会|在|从|向)/u.test(objectText);
+}
+
+function isRealInstrumentPhrase(prep: string, inst: string): boolean {
+  const head = inst.replace(/(?:进行|完成|实现|执行)$/u, "");
+  if (!head) return false;
+  return !NON_INSTRUMENT_COMPOUNDS.has(`${prep}${head}`);
+}
+
+interface BaInstrumentHit {
+  full: string;
+  prefix: string;
+  ba: string;
+  obj: string;
+  prep: string;
+  inst: string;
+  verb: string;
+}
+
+function findBaInstrument(sentence: string): BaInstrumentHit | null {
+  const canAlign = typeof Intl !== "undefined" && "Segmenter" in Intl;
+  const spans = canAlign ? wordSpans(sentence) : [];
+  const re = new RegExp(BA_INSTRUMENT_RE.source, "gu");
+  let matched: RegExpExecArray | null;
+  while ((matched = re.exec(sentence))) {
+    const full = matched[0];
+    const prefix = matched[1] ?? "";
+    const ba = matched[2] ?? "";
+    const obj = matched[3] ?? "";
+    const prep = matched[4] ?? "";
+    const inst = matched[5] ?? "";
+    const verb = matched[6] ?? "";
+    if (isBareFutureJiang(ba, obj) || !isRealInstrumentPhrase(prep, inst)) {
+      continue;
+    }
+    if (canAlign) {
+      const base = matched.index;
+      const starts = locateParts(full, [prefix, ba, obj, prep, inst, verb]);
+      if (starts.length !== 6) continue;
+      const covers = (partIndex: number, part: string) =>
+        spanAligns(spans, base + starts[partIndex], base + starts[partIndex] + part.length);
+      if (!covers(1, ba) || !covers(3, prep) || !covers(4, inst) || !covers(5, verb)) continue;
+    }
+    return { full, prefix, ba, obj, prep, inst, verb };
+  }
+  return null;
+}
+
 export function evaluateGrammarInspection(rawMarkdown: string): GrammarInspectionResult {
   const withoutScaffold = rawMarkdown
     .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/u, "")
@@ -672,12 +765,11 @@ export function evaluateGrammarInspection(rawMarkdown: string): GrammarInspectio
       continue;
     }
 
-    // 4. SVO Word Order Error: 把/对...通过/利用... (object placed before instrument adverbial)
-    const baInstrumentMatch = sent.match(
-      /([^，,。！？；\n]*?)(把|将)([\u4e00-\u9fffA-Za-z0-9]{1,10}?)(通过|利用|使用|借助)([\u4e00-\u9fffA-Za-z0-9]{2,10})(?:来)?(?:进行|完成)?([\u4e00-\u9fff]{2})(?=[，,。！？；\n]|$)/u
-    );
+    // 4. SVO Word Order Error: 把/将 + object before a real instrument adverbial.
+    // Future 将 (将于/将要/将会) is not 把. 使用/通过 inside words such as 使用手册/通过评审 is not an instrument.
+    const baInstrumentMatch = findBaInstrument(sent);
     if (baInstrumentMatch) {
-      const [, prefix, ba, obj, prep, inst, verb] = baInstrumentMatch;
+      const { full, prefix, ba, obj, prep, inst, verb } = baInstrumentMatch;
       seenSentences.add(sent);
       issues.push({
         sentence: sent,
@@ -685,7 +777,7 @@ export function evaluateGrammarInspection(rawMarkdown: string): GrammarInspectio
         kind: "svo_order_error",
         pattern_name: "object_before_instrument_adverbial",
         reason: `主谓宾与状语语序错误：受事宾语「${ba}${obj}」被错误置于方式状语「${prep}${inst}」之前`,
-        suggestion: sent.replace(baInstrumentMatch[0], `${prefix}${prep}${inst}${ba}${obj}${verb}`),
+        suggestion: sent.replace(full, `${prefix}${prep}${inst}${ba}${obj}${verb}`),
       });
       continue;
     }
@@ -1443,7 +1535,7 @@ async function callHanLPRestful(text: string, options: HanLPOptions): Promise<Re
       headers,
       body: JSON.stringify({
         text,
-        tasks: ["tok/fine", "tok/coarse", "pos/ctb", "ner/msra", "srl", "dep"],
+        tasks: ["tok/fine", "ner/msra", "srl", "dep"],
         language: options.language || "zh",
       }),
       signal: controller.signal,
@@ -1474,9 +1566,8 @@ function callHanLPNativeBridge(text: string, options: HanLPOptions): Record<stri
           auth: options.auth || null,
           language: options.language || "zh",
           custom_dict_path: options.customDictPath,
-          tasks: ["tok/fine", "tok/coarse", "pos/ctb", "ner/msra", "srl", "dep"],
+          tasks: ["tok/fine", "ner/msra", "srl", "dep"],
           extract_keyphrases: true,
-          summarize: true,
         }),
         encoding: "utf-8",
         timeout: options.timeoutMs ?? 8000,
@@ -1504,15 +1595,6 @@ function normalizeHanLPDocumentResponse(
     : Array.isArray(doc["tok"])
       ? doc["tok"]
       : splitSentencesMultilingual(rawText).map((s) => segmentTextLocal(s, customDict));
-
-  const tokCoarse: string[][] = Array.isArray(doc["tok/coarse"]) ? doc["tok/coarse"] : tokFine;
-  const posTags: string[][] = Array.isArray(doc["pos/ctb"])
-    ? doc["pos/ctb"]
-    : Array.isArray(doc["pos/pku"])
-      ? doc["pos/pku"]
-      : Array.isArray(doc["pos"])
-        ? doc["pos"]
-        : tokFine.map((sent) => sent.map(() => "NN"));
 
   const sentences =
     Array.isArray(rawDoc.sentences) && rawDoc.sentences.length === tokFine.length
@@ -1603,27 +1685,13 @@ function normalizeHanLPDocumentResponse(
   const mergedEntities = entities.length > 0 ? entities : localExtracted.entities;
   const mergedSrl = srlFrames.length > 0 ? srlFrames : extractLocalSrlFrames(sentences);
 
-  const extractiveSummary =
-    sentences.length <= 3
-      ? sentences
-      : [...sentences]
-          .sort((a, b) => {
-            const scoreA = keyphrases.reduce((acc, kp) => acc + (a.includes(kp.phrase) ? kp.score : 0), 0);
-            const scoreB = keyphrases.reduce((acc, kp) => acc + (b.includes(kp.phrase) ? kp.score : 0), 0);
-            return scoreB - scoreA;
-          })
-          .slice(0, 3);
-
   return {
     backendUsed,
     sentences,
     tokensFine: tokFine,
-    tokensCoarse: tokCoarse,
-    posTags,
     entities: mergedEntities,
     srlFrames: mergedSrl,
     keyphrases,
-    extractiveSummary,
     depDiagnostics: {
       sentenceCount: sentences.length,
       maxTreeDepth,
@@ -1688,7 +1756,6 @@ export function analyzeWithHanLPSync(
       sentences,
       document: {
         "tok/fine": tokensFine,
-        "tok/coarse": tokensFine,
       },
     },
     "local-fallback",

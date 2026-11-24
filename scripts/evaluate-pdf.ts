@@ -30,7 +30,6 @@ export interface PdfPositionedTextItem {
   x: number;
   y: number;
   width?: number;
-  hasEOL?: boolean;
 }
 
 export interface NavigationEntry {
@@ -64,11 +63,12 @@ interface PdfEvaluatorArgs {
 
 const HEADING_PREFIX = String.raw`(?:(?:\d+(?:\.\d+)*|[IVX]{1,5}|[一二三四五六七八九十]+)[.、:\s]+)?`;
 
+// Chinese headings are not ASCII words, so only the English alternatives keep a trailing \b.
 const SECTION_PATTERNS: Record<"abstract" | "results" | "method" | "conclusion", RegExp> = {
-  abstract: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:摘\s*要|abstract)\b`, "imu"),
-  results: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:实验结果与分析|实验与结果|实验结果|实验评估|结果|experiments?(?:\s+and\s+results)?|results(?:\s+and\s+analysis)?|empirical\s+evaluation|evaluation)\b`, "imu"),
-  method: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:材料与方法|材料和方法|研究方法|方法论|模型架构|算法设计|核心机制|系统设计|方法|materials\s+and\s+methods|method(?:ology|s)?|proposed\s+(?:method|approach|framework|model|architecture|algorithm)|technical\s+approach|framework|architecture|model\s+design)\b`, "imu"),
-  conclusion: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:讨论与结论|总结与展望|结论与展望|结论|讨论|conclusion(?:s)?(?:\s+and\s+future\s+work)?|discussion(?:\s+and\s+conclusion)?|summary\s+and\s+conclusion)\b`, "imu"),
+  abstract: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:摘\s*要|abstract\b)`, "imu"),
+  results: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:实验结果与分析|实验与结果|实验结果|实验评估|结果|(?:experiments?(?:\s+and\s+results)?|results(?:\s+and\s+analysis)?|empirical\s+evaluation|evaluation)\b)`, "imu"),
+  method: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:材料与方法|材料和方法|研究方法|方法论|模型架构|算法设计|核心机制|系统设计|方法|(?:materials\s+and\s+methods|method(?:ology|s)?|proposed\s+(?:method|approach|framework|model|architecture|algorithm)|technical\s+approach|framework|architecture|model\s+design)\b)`, "imu"),
+  conclusion: new RegExp(String.raw`(?:^|\n)\s*${HEADING_PREFIX}(?:讨论与结论|总结与展望|结论与展望|结论|讨论|(?:conclusion(?:s)?(?:\s+and\s+future\s+work)?|discussion(?:\s+and\s+conclusion)?|summary\s+and\s+conclusion)\b)`, "imu"),
 };
 
 const SECTION_MAX_CHARS: Record<"abstract" | "results" | "method" | "conclusion", number> = {
@@ -283,17 +283,12 @@ function mergeLineItems(items: PdfPositionedTextItem[]): string[] {
   };
 
   for (const item of sorted) {
-    if (!item.str && !item.hasEOL) continue;
+    if (!item.str) continue;
     if (currentY !== null && Math.abs(item.y - currentY) > 2.8) {
       flush();
     }
-    if (item.str) {
-      currentItems.push(item);
-      if (currentY === null) currentY = item.y;
-    }
-    if (item.hasEOL && currentItems.length > 0 && currentItems.length > 8) {
-      // Preserve coordinate grouping over premature mid-column EOL flags
-    }
+    currentItems.push(item);
+    if (currentY === null) currentY = item.y;
   }
   flush();
   return lines;
@@ -310,7 +305,10 @@ export function sortPdfTextItemsTwoColumn(
   const classify = (it: PdfPositionedTextItem): "left" | "right" | "full" => {
     const estW = it.width !== undefined && it.width > 0 ? it.width : it.str.length * 4.8;
     const endX = it.x + estW;
-    if (it.x < midX - 14 && endX <= midX + 16) return "left";
+    // Relaxed from midX + 16: a left-column line may cross the gutter, but a run that
+    // reaches a third of the way into the right column, or is wider than 60% of the page, is full.
+    const spansBothColumns = endX > midX + pageWidth / 6 || estW > pageWidth * 0.6;
+    if (it.x < midX - 14 && !spansBothColumns) return "left";
     if (it.x >= midX - 12) return "right";
     return "full";
   };
@@ -342,8 +340,14 @@ export function sortPdfTextItemsTwoColumn(
     }
     const leftItems = seg.items.filter((it) => classify(it) === "left");
     const rightItems = seg.items.filter((it) => classify(it) === "right");
+    const continuesLine = (right: PdfPositionedTextItem): boolean => leftItems.some((left) => {
+      if (Math.abs(left.y - right.y) > 2.8) return false;
+      const estW = left.width !== undefined && left.width > 0 ? left.width : left.str.length * 4.8;
+      const gap = right.x - (left.x + estW);
+      return gap >= -1.5 && gap <= 6;
+    });
     const leftLines = mergeLineItems(leftItems);
-    const rightLines = mergeLineItems(rightItems);
+    const rightLines = mergeLineItems(rightItems.filter((right) => !continuesLine(right)));
     if (leftLines.length >= 2 && rightLines.length >= 2) {
       detectedTwoColumn = true;
       outputLines.push(...leftLines, ...rightLines);
@@ -384,7 +388,6 @@ async function extractPages(pdfPath: string): Promise<{ pages: PageText[]; pageC
         x,
         y,
         width,
-        hasEOL: Boolean(item.hasEOL),
       });
     }
 
@@ -421,7 +424,6 @@ function isRunningHeaderOrBannerLine(line: string): boolean {
   if (singleLetterRatio > 0.6) return true;
   if (trimmed.length < 12) return true;
   if (/sci\.?\s*adv|science advances|research article|computer science|^\d+\s+of\s+\d+/iu.test(trimmed)) return true;
-  if (/^doshi and hauser/iu.test(trimmed)) return true;
   if (/\b(?:19|20)\d{2}\b/u.test(trimmed) && /\b(?:doi|vol\.|eadn\d+)/iu.test(trimmed)) return true;
   return false;
 }
@@ -475,11 +477,20 @@ function sectionEvidence(kind: "abstract" | "results" | "method" | "conclusion",
     return trimmed.length <= 68 && pattern.test(`\n${trimmed}`);
   }));
   if (!page) return undefined;
-  const headingLine = page.text.split(/\r?\n/u).find((line) => {
+  // indexOf(headingLine) can land inside an earlier line, such as "Results from the pilot".
+  const lines = page.text.split(/\r?\n/u);
+  let offset = 0;
+  let headingIndex = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
     const trimmed = line.trim();
-    return trimmed.length <= 68 && pattern.test(`\n${trimmed}`);
-  }) ?? "";
-  const headingIndex = page.text.indexOf(headingLine);
+    if (trimmed.length <= 68 && pattern.test(`\n${trimmed}`)) {
+      headingIndex = offset;
+      break;
+    }
+    offset += line.length;
+    if (i < lines.length - 1) offset += page.text.startsWith("\r\n", offset) ? 2 : 1;
+  }
   const fromHeading = headingIndex < 0 ? page.text : page.text.slice(headingIndex);
   return {
     id: "",
